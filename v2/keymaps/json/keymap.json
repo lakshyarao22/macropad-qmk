@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "notes": "",
+  "documentation": "\"This file is a QMK Configurator export. You can import this at <https://config.qmk.fm>. It can also be used directly with QMK's source code.\n\nTo setup your QMK environment check out the tutorial: <https://docs.qmk.fm/#/newbs>\n\nYou can convert this file to a keymap.c using this command: `qmk json2c {keymap}`\n\nYou can compile this keymap using this command: `qmk compile {keymap}`\"\n",
+  "keyboard": "9key",
+  "keymap": "9key_layout_2025-11-14",
+  "layout": "LAYOUT",
+  "layers": [
+    [
+      "KC_BRID",
+      "KC_BRIU",
+      "KC_MUTE",
+      "LGUI(KC_L)",
+      "KC_MPLY",
+      "KC_VOLU",
+      "LT(1,KC_COPY)",
+      "KC_PSTE",
+      "KC_VOLD"
+    ],
+    [
+      "UG_TOGG",
+      "UG_PREV",
+      "UG_HUED",
+      "KC_NO",
+      "UG_SPDU",
+      "UG_VALU",
+      "KC_NO",
+      "UG_SPDD",
+      "UG_VALD"
+    ]
+  ],
+  "author": ""
+}
