@@ -22,9 +22,9 @@ This repository contains the custom [QMK Firmware](https://qmk.fm/) for a 3x3 ma
 
 ## Hardware
 
-- **MCU:** [Specify MCU here, e.g., ATmega32u4]
+- **MCU:** RP2040-Zero
 - **LEDs:** WS2812B addressable RGB LEDs
-- **Switches:** MX-compatible switches (3x3 grid)
+- **Switches:** Cherry MX switches (3x3 grid)
 - **Case/Pcb:** Custom design
 
 ## Getting Started
