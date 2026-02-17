@@ -1,0 +1,9 @@
+{
+        "rgblight": {
+            "led_count": 1,
+            "layers": {
+                "enabled": true
+            }
+        }
+    }
+    
