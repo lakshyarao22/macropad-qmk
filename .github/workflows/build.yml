@@ -17,21 +17,16 @@ jobs:
         with:
           path: repo
 
-      - name: Setup QMK environment
-        run: |
-          mkdir -p /qmk_firmware/keyboards/macropad
-          cd /qmk_firmware
-          qmk setup --home . --no-default-keymap
-
       - name: Copy keyboard files
         run: |
+          mkdir -p /qmk_firmware/keyboards/macropad
           cp -r repo/* /qmk_firmware/keyboards/macropad/
           ls -la /qmk_firmware/keyboards/macropad/
 
       - name: Build Firmware
         run: |
           cd /qmk_firmware
-          qmk compile -kb macropad -km default -e CONVERT_TO_RP2040=yes 2>&1 | tee build.log
+          qmk compile -kb macropad -km default 2>&1 | tee build.log
           
       - name: Find UF2 file
         run: |
