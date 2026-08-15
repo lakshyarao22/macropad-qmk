@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: qmkfm/qmk_firmware:latest
 
@@ -50,15 +52,13 @@ jobs:
 
       - name: Create Release on Tag
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: /tmp/macropad_v2_default.uf2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release on Main Push
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: /tmp/macropad_v2_default.uf2
           tag_name: build-${{ github.run_number }}-${{ github.sha }}
@@ -67,5 +67,3 @@ jobs:
             Build number: ${{ github.run_number }}
           draft: false
           prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
