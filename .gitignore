@@ -1,0 +1,33 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.elf
+*.hex
+*.uf2
+.build/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# QMK
+.qmk_firmware/
+
+# OS
+Thumbs.db
