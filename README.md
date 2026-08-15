@@ -74,6 +74,29 @@ When prompted, enter bootloader mode by:
 - **Physical reset**: Press the reset button on the PCB
 - **Keycode**: Press the key mapped to `QK_BOOT`
 
+## Automated Builds & Releases
+
+This repository uses **GitHub Actions** to automatically build the firmware and generate UF2 releases on every commit.
+
+### How It Works
+
+- **Trigger**: Every push to `main`, `master`, or `develop` branches
+- **Build**: Compiles QMK firmware for RP2040 using the official QMK container
+- **Output**: Generates a `.uf2` file ready for flashing
+- **Release**: Automatically creates a GitHub Release with the UF2 file attached
+  - Tagged releases (e.g., `v1.0.0`) are marked as stable releases
+  - Main branch commits are marked as pre-release builds
+
+### Downloading Pre-built Firmware
+
+1. Go to the [Releases](../../releases) page
+2. Download the latest `macropad_v2_default.uf2` file
+3. Flash to your macropad using one of the bootloader methods above
+
+### Build Artifacts
+
+All successful builds create artifacts that can be downloaded from the **Actions** tab for 30 days.
+
 ## Hardware
 
 | Component | Specification |
