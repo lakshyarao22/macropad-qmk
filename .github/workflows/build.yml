@@ -36,15 +36,7 @@ jobs:
 
           echo "===== Macropad files ====="
           find keyboards/macropad -maxdepth 3 -type f -print
-
-      - name: Check QMK version
-        run: |
-          echo "===== QMK version ====="
-          qmk --version
-
-          echo "===== QMK git version ====="
-          git log -1 --oneline
-
+          
       - name: Build Firmware
         run: |
           qmk compile -kb macropad -km default
