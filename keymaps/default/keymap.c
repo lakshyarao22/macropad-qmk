@@ -73,19 +73,19 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
     switch (layer) {
         case 0:
-            rgblight_blink_layer_repeat(0, 200, 2);
+            rgblight_blink_layer_repeat(0, 100, 2);
             break;
 
         case 1:
-            rgblight_blink_layer_repeat(1, 200, 2);
+            rgblight_blink_layer_repeat(1, 100, 2);
             break;
 
         case 2:
-            rgblight_blink_layer_repeat(2, 200, 2);
+            rgblight_blink_layer_repeat(2, 100, 2);
             break;
 
         case 3:
-            rgblight_blink_layer_repeat(3, 200, 2);
+            rgblight_blink_layer_repeat(3, 100, 2);
             break;
     }
 
