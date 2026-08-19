@@ -10,7 +10,9 @@
  * ========================= */
 
 enum custom_keycodes {
-    PASS = SAFE_RANGE
+    PASS = SAFE_RANGE,
+    LAYER_PREV,
+    LAYER_NEXT
 };
 
 
@@ -97,28 +99,40 @@ layer_state_t layer_state_set_user(layer_state_t state) {
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
+    /* =====================
+     * Layer 0 - F13/F21
+     * ===================== */
     [0] = LAYOUT(
         KC_F13, KC_F14, KC_F15,
         KC_F16, KC_F17, KC_F18,
-        TG(3), KC_F19, TG(1)
+        LAYER_PREV, KC_F19, LAYER_NEXT
     ),
 
+    /* =====================
+     * Layer 1 - Media
+     * ===================== */
     [1] = LAYOUT(
         KC_VOLD, KC_MUTE, KC_VOLU,
         KC_MPRV, KC_MPLY, KC_MNXT,
-        TG(0), KC_NO, TG(2)
+        LAYER_PREV, KC_NO, LAYER_NEXT
     ),
 
+    /* =====================
+     * Layer 2 - Shortcuts
+     * ===================== */
     [2] = LAYOUT(
         KC_BRID, KC_NO, KC_BRIU,
         LSG(KC_S), LGUI(KC_L), PASS,
-        TG(1), KC_NO, TG(3)
+        LAYER_PREV, KC_NO, LAYER_NEXT
     ),
 
+    /* =====================
+     * Layer 3 - RGB Controls
+     * ===================== */
     [3] = LAYOUT(
         UG_TOGG, UG_NEXT, UG_HUEU,
         UG_VALD, UG_VALU, UG_HUED,
-        UG_SPDD, UG_SPDU, TG(0)
+        LAYER_PREV, UG_SPDU, LAYER_NEXT
     )
 };
 
@@ -128,12 +142,51 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  * ========================= */
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+
+    /* Only act when key is pressed */
+    if (!record->event.pressed) {
+        return true;
+    }
+
     switch (keycode) {
 
-        case PASS:
-            if (record->event.pressed) {
-                SEND_STRING("!Hello\n");
+        /* -------------------------
+         * Previous layer
+         * ------------------------- */
+        case LAYER_PREV: {
+            uint8_t current_layer = get_highest_layer(layer_state);
+
+            if (current_layer == 0) {
+                layer_move(3);
+            } else {
+                layer_move(current_layer - 1);
             }
+
+            return false;
+        }
+
+
+        /* -------------------------
+         * Next layer
+         * ------------------------- */
+        case LAYER_NEXT: {
+            uint8_t current_layer = get_highest_layer(layer_state);
+
+            if (current_layer >= 3) {
+                layer_move(0);
+            } else {
+                layer_move(current_layer + 1);
+            }
+
+            return false;
+        }
+
+
+        /* -------------------------
+         * PASS key
+         * ------------------------- */
+        case PASS:
+            SEND_STRING("!Hello\n");
             return false;
     }
 
