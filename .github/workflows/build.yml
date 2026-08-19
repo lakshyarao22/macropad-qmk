@@ -2,46 +2,67 @@ name: Build QMK Macropad
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main, master, develop]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     permissions:
       contents: write
-    container:
-      image: qmkfm/qmk_firmware:latest
+
+    container: ghcr.io/qmk/qmk_cli
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout QMK Firmware
+        uses: actions/checkout@v4
         with:
-          path: repo
+          repository: qmk/qmk_firmware
+          submodules: recursive
 
-      - name: Copy keyboard files
+      - name: Checkout Macropad
+        uses: actions/checkout@v4
+        with:
+          path: macropad
+
+      - name: Install keyboard files
         run: |
-          mkdir -p /qmk_firmware/keyboards/macropad
-          cp -r repo/* /qmk_firmware/keyboards/macropad/
-          ls -la /qmk_firmware/keyboards/macropad/
+          rm -rf keyboards/macropad
+          mkdir -p keyboards/macropad
+          cp -r macropad/* keyboards/macropad/
+
+          echo "===== Macropad files ====="
+          find keyboards/macropad -maxdepth 3 -type f -print
+
+      - name: Check QMK version
+        run: |
+          echo "===== QMK version ====="
+          qmk --version
+
+          echo "===== QMK git version ====="
+          git log -1 --oneline
 
       - name: Build Firmware
         run: |
-          cd /qmk_firmware
-          qmk compile -kb macropad -km default 2>&1 | tee build.log
-          
-      - name: Find UF2 file
+          qmk compile -kb macropad -km default
+
+      - name: Find Firmware
         run: |
-          cd /qmk_firmware
+          echo "===== Firmware files ====="
           find . -name "*.uf2" -type f -exec ls -lh {} \;
-          if [ -f "macropad_default.uf2" ]; then
-            cp macropad_default.uf2 /tmp/macropad_v2_default.uf2
-          elif [ -f ".build/macropad_default.uf2" ]; then
-            cp .build/macropad_default.uf2 /tmp/macropad_v2_default.uf2
-          else
-            find . -name "*.uf2" -type f -exec cp {} /tmp/macropad_v2_default.uf2 \;
+
+          UF2=$(find . -name "*.uf2" -type f | head -n 1)
+
+          if [ -z "$UF2" ]; then
+            echo "ERROR: No UF2 firmware was generated!"
+            exit 1
           fi
-          ls -lh /tmp/macropad_v2_default.uf2
+
+          echo "Found firmware: $UF2"
+          cp "$UF2" /tmp/macropad_v2_default.uf2
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
