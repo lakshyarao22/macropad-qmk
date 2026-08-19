@@ -66,4 +66,4 @@ jobs:
             Automatic build from commit ${{ github.sha }}
             Build number: ${{ github.run_number }}
           draft: false
-          prerelease: true
+          prerelease: false
