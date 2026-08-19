@@ -19,7 +19,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [1] = LAYOUT(
         KC_VOLD, KC_MUTE, KC_VOLU,
         KC_MPRV, KC_MPLY, KC_MNXT,
-        KC_BRIU, KC_BRID, KC_NO
+        KC_BRID, KC_BRIU, KC_NO
     ),
 
     [2] = LAYOUT(
