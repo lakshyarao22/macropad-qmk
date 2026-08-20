@@ -32,23 +32,29 @@ enum custom_keycodes {
 /* =========================================================
  * Password storage
  *
- * 7 password slots
+ * Seven independent password slots.
  *
  * Each slot:
  *
- *   byte 0       = password length
- *   bytes 1-31   = password
+ *   byte 0      = password length
+ *   bytes 1-31  = password
  *
- * Slot size = 32 bytes
+ * Slot size = 32 bytes.
  *
- * Slot 1 = EEPROM 100-131
- * Slot 2 = EEPROM 132-163
- * Slot 3 = EEPROM 164-195
- * Slot 4 = EEPROM 196-227
- * Slot 5 = EEPROM 228-259
- * Slot 6 = EEPROM 260-291
- * Slot 7 = EEPROM 292-323
+ * EEPROM:
  *
+ *   Slot 1 -> 100 - 131
+ *   Slot 2 -> 132 - 163
+ *   Slot 3 -> 164 - 195
+ *   Slot 4 -> 196 - 227
+ *   Slot 5 -> 228 - 259
+ *   Slot 6 -> 260 - 291
+ *   Slot 7 -> 292 - 323
+ *
+ * Passwords are NOT stored in firmware source.
+ * They are written later through Raw HID.
+ *
+ * NOTE:
  * EEPROM is NOT encrypted.
  * ========================================================= */
 
@@ -64,21 +70,6 @@ static uint8_t pass_len = 0;
 
 
 /* =========================================================
- * EEPROM helper
- *
- * QMK's current EEPROM API expects pointers.
- *
- * The RP2040 EEPROM implementation exposes the EEPROM
- * memory through the address space, so we convert the
- * numeric offset to a pointer only at the API boundary.
- * ========================================================= */
-
-static uint8_t *pass_eeprom_ptr(uint16_t address) {
-    return (uint8_t *)(uintptr_t)address;
-}
-
-
-/* =========================================================
  * Load password from EEPROM
  * ========================================================= */
 
@@ -90,32 +81,20 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
+    eeprom_address_t address =
+        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
-    uint16_t address =
-        PASS_EEPROM_BASE +
-        ((uint16_t)slot * PASS_SLOT_SIZE);
-
-
-    pass_len =
-        eeprom_read_byte(
-            pass_eeprom_ptr(address)
-        );
-
+    pass_len = eeprom_read_byte(address);
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
-
-    if (pass_len > 0) {
-
-        eeprom_read_block(
-            pass_buf,
-            pass_eeprom_ptr(address + 1),
-            pass_len
-        );
-    }
-
+    eeprom_read_block(
+        pass_buf,
+        address + 1,
+        pass_len
+    );
 
     pass_buf[pass_len] = '\0';
 }
@@ -135,31 +114,23 @@ static void pass_save_to_eeprom(
         return;
     }
 
-
     if (len > PASS_MAX_LEN) {
         len = PASS_MAX_LEN;
     }
 
-
-    uint16_t address =
-        PASS_EEPROM_BASE +
-        ((uint16_t)slot * PASS_SLOT_SIZE);
-
+    eeprom_address_t address =
+        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
     eeprom_update_byte(
-        pass_eeprom_ptr(address),
+        address,
         len
     );
 
-
-    if (len > 0) {
-
-        eeprom_update_block(
-            new_pass,
-            pass_eeprom_ptr(address + 1),
-            len
-        );
-    }
+    eeprom_update_block(
+        new_pass,
+        address + 1,
+        len
+    );
 }
 
 
@@ -173,9 +144,7 @@ static void pass_send_slot(uint8_t slot) {
         return;
     }
 
-
     pass_load_from_eeprom(slot);
-
 
     if (pass_len > 0) {
 
@@ -188,14 +157,26 @@ static void pass_send_slot(uint8_t slot) {
 
 /* =========================================================
  * Raw HID password provisioning
+ *
+ * Packet received from Python:
+ *
+ *   data[0] = command
+ *   data[1] = slot
+ *   data[2] = password length
+ *   data[3...] = password
+ *
+ * Response:
+ *
+ *   response[0] = command
+ *   response[1] = slot
+ *   response[2] = 1
+ *
  * ========================================================= */
 
 #ifdef RAW_ENABLE
 
-#define RAW_HID_PACKET_SIZE 32
-
 enum raw_hid_commands {
-    CMD_SET_PASSWORD = 0x01
+    CMD_SET_PASSWORD = 0x01,
 };
 
 
@@ -204,26 +185,15 @@ void raw_hid_receive(
     uint8_t length
 ) {
 
-    /*
-     * Minimum packet:
-     *
-     * byte 0 = command
-     * byte 1 = slot
-     * byte 2 = password length
-     */
-
     if (length < 3) {
         return;
     }
 
-
     uint8_t cmd =
         data[0];
 
-
     uint8_t slot =
         data[1];
-
 
     uint8_t payload_len =
         data[2];
@@ -240,7 +210,8 @@ void raw_hid_receive(
 
 
     /*
-     * Never exceed our maximum password length.
+     * Never allow more than our EEPROM slot
+     * can hold.
      */
 
     if (payload_len > PASS_MAX_LEN) {
@@ -249,7 +220,8 @@ void raw_hid_receive(
 
 
     /*
-     * Never read outside the received HID packet.
+     * Make sure we don't read past the
+     * received HID packet.
      */
 
     if (payload_len > (length - 3)) {
@@ -267,13 +239,10 @@ void raw_hid_receive(
     /*
      * Send acknowledgement.
      *
-     * response[0] = command
-     * response[1] = slot
-     * response[2] = success
+     * QMK Raw HID packets are 32 bytes.
      */
 
-    uint8_t response[RAW_HID_PACKET_SIZE] = {0};
-
+    uint8_t response[32] = {0};
 
     response[0] = CMD_SET_PASSWORD;
     response[1] = slot;
@@ -282,7 +251,7 @@ void raw_hid_receive(
 
     raw_hid_send(
         response,
-        RAW_HID_PACKET_SIZE
+        sizeof(response)
     );
 }
 
@@ -293,9 +262,17 @@ void raw_hid_receive(
  * Layer colors
  * ========================================================= */
 
-#define LAYER0_HUE     0
-#define LAYER0_SAT     220
-#define LAYER0_MAXPCT  65
+/*
+ * Layer 0 = Cyan
+ * Layer 1 = Blue
+ * Layer 2 = Green
+ *
+ * All layers have a maximum brightness of 100%.
+ */
+
+#define LAYER0_HUE     128
+#define LAYER0_SAT     255
+#define LAYER0_MAXPCT  100
 
 #define LAYER1_HUE     191
 #define LAYER1_SAT     200
@@ -305,14 +282,18 @@ void raw_hid_receive(
 #define LAYER2_SAT     210
 #define LAYER2_MAXPCT  100
 
-#define LAYER3_HUE     128
-#define LAYER3_SAT     255
-#define LAYER3_MAXPCT  100
-
 
 /* =========================================================
- * RGB breathing
+ * Breathing RGB effect
  * ========================================================= */
+
+/*
+ * Full breathing cycle:
+ *
+ * 40% -> 100% -> 40%
+ *
+ * 10 seconds total.
+ */
 
 #define BREATH_PERIOD_MS    10000
 #define BREATH_MIN_PERCENT  40
@@ -327,10 +308,8 @@ void raw_hid_receive(
 static uint8_t current_hue =
     LAYER0_HUE;
 
-
 static uint8_t current_sat =
     LAYER0_SAT;
-
 
 static uint8_t current_max_val =
     PCT_TO_VAL(LAYER0_MAXPCT);
@@ -362,6 +341,10 @@ void housekeeping_task_user(void) {
     static uint32_t last_update = 0;
 
 
+    /*
+     * Update RGB every 20 ms.
+     */
+
     if (timer_elapsed32(last_update) < 20) {
         return;
     }
@@ -370,53 +353,42 @@ void housekeeping_task_user(void) {
     last_update = timer_read32();
 
 
-    uint32_t phase =
-        timer_read32() % BREATH_PERIOD_MS;
-
-
-    uint32_t half =
+    uint16_t half =
         BREATH_PERIOD_MS / 2;
 
 
-    uint32_t position;
+    uint16_t phase =
+        timer_read32() % BREATH_PERIOD_MS;
 
 
-    if (phase < half) {
+    /*
+     * Create triangle-wave breathing.
+     *
+     * 0 -> maximum
+     * maximum -> 0
+     */
 
-        position = phase;
-
-    } else {
-
-        position =
-            BREATH_PERIOD_MS - phase;
-    }
+    uint16_t position =
+        (phase < half)
+            ? phase
+            : (BREATH_PERIOD_MS - phase);
 
 
     uint8_t val =
         BREATH_MIN_VAL +
         (uint8_t)(
-            ((uint32_t)(
+            (uint32_t)(
                 current_max_val -
                 BREATH_MIN_VAL
-            ) * position) / half
+            ) * position / half
         );
 
 
-    /*
-     * Only update the RGB LEDs when RGB is enabled.
-     *
-     * This prevents the housekeeping task from fighting
-     * with UG_TOGG.
-     */
-
-    if (rgblight_is_enabled()) {
-
-        rgblight_sethsv_noeeprom(
-            current_hue,
-            current_sat,
-            val
-        );
-    }
+    rgblight_sethsv_noeeprom(
+        current_hue,
+        current_sat,
+        val
+    );
 }
 
 
@@ -428,13 +400,15 @@ void keyboard_post_init_user(void) {
 
     /*
      * Load slot 0 initially.
+     * Individual slots are loaded when their
+     * corresponding key is pressed.
      */
 
     pass_load_from_eeprom(0);
 
 
     /*
-     * Start RGB.
+     * Start RGB lighting.
      */
 
     rgblight_enable_noeeprom();
@@ -463,6 +437,10 @@ layer_state_t layer_state_set_user(
 
     switch (get_highest_layer(state)) {
 
+        /* =================================================
+         * Layer 0 - Cyan
+         * ================================================= */
+
         case 0:
 
             current_hue =
@@ -476,6 +454,10 @@ layer_state_t layer_state_set_user(
 
             break;
 
+
+        /* =================================================
+         * Layer 1 - Blue
+         * ================================================= */
 
         case 1:
 
@@ -491,6 +473,10 @@ layer_state_t layer_state_set_user(
             break;
 
 
+        /* =================================================
+         * Layer 2 - Green
+         * ================================================= */
+
         case 2:
 
             current_hue =
@@ -501,20 +487,6 @@ layer_state_t layer_state_set_user(
 
             current_max_val =
                 PCT_TO_VAL(LAYER2_MAXPCT);
-
-            break;
-
-
-        case 3:
-
-            current_hue =
-                LAYER3_HUE;
-
-            current_sat =
-                LAYER3_SAT;
-
-            current_max_val =
-                PCT_TO_VAL(LAYER3_MAXPCT);
 
             break;
     }
@@ -530,8 +502,13 @@ layer_state_t layer_state_set_user(
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
+
     /* =====================================================
      * Layer 0
+     *
+     * F13 - F19
+     *
+     * Color: Cyan
      * ===================================================== */
 
     [0] = LAYOUT(
@@ -552,6 +529,18 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     /* =====================================================
      * Layer 1
+     *
+     * Volume / Media / Brightness
+     *
+     * VOL DOWN:
+     *   tap  = Volume Down
+     *   hold = Previous Track
+     *
+     * VOL UP:
+     *   tap  = Volume Up
+     *   hold = Next Track
+     *
+     * Color: Blue
      * ===================================================== */
 
     [1] = LAYOUT(
@@ -572,6 +561,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     /* =====================================================
      * Layer 2
+     *
+     * Seven password slots
+     *
+     * Color: Green
      * ===================================================== */
 
     [2] = LAYOUT(
@@ -586,26 +579,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
         LAYER_PREV,
         PASS7,
-        LAYER_NEXT
-    ),
-
-
-    /* =====================================================
-     * Layer 3
-     * ===================================================== */
-
-    [3] = LAYOUT(
-
-        UG_TOGG,
-        UG_NEXT,
-        UG_HUEU,
-
-        UG_VALD,
-        UG_VALU,
-        UG_HUED,
-
-        LAYER_PREV,
-        UG_SPDU,
         LAYER_NEXT
     )
 };
@@ -622,6 +595,10 @@ bool process_record_user(
 
     switch (keycode) {
 
+        /* =================================================
+         * Password 1
+         * ================================================= */
+
         case PASS1:
 
             if (record->event.pressed) {
@@ -630,6 +607,10 @@ bool process_record_user(
 
             return false;
 
+
+        /* =================================================
+         * Password 2
+         * ================================================= */
 
         case PASS2:
 
@@ -640,6 +621,10 @@ bool process_record_user(
             return false;
 
 
+        /* =================================================
+         * Password 3
+         * ================================================= */
+
         case PASS3:
 
             if (record->event.pressed) {
@@ -648,6 +633,10 @@ bool process_record_user(
 
             return false;
 
+
+        /* =================================================
+         * Password 4
+         * ================================================= */
 
         case PASS4:
 
@@ -658,6 +647,10 @@ bool process_record_user(
             return false;
 
 
+        /* =================================================
+         * Password 5
+         * ================================================= */
+
         case PASS5:
 
             if (record->event.pressed) {
@@ -667,6 +660,10 @@ bool process_record_user(
             return false;
 
 
+        /* =================================================
+         * Password 6
+         * ================================================= */
+
         case PASS6:
 
             if (record->event.pressed) {
@@ -675,6 +672,10 @@ bool process_record_user(
 
             return false;
 
+
+        /* =================================================
+         * Password 7
+         * ================================================= */
 
         case PASS7:
 
@@ -702,6 +703,16 @@ bool process_record_user(
                 return false;
             }
 
+
+            /*
+             * Key released.
+             *
+             * If it wasn't held long enough:
+             * send Volume Down.
+             *
+             * If it was held:
+             * Previous Track was already sent.
+             */
 
             if (volume_down_active) {
 
@@ -736,6 +747,16 @@ bool process_record_user(
             }
 
 
+            /*
+             * Key released.
+             *
+             * If it wasn't held long enough:
+             * send Volume Up.
+             *
+             * If it was held:
+             * Next Track was already sent.
+             */
+
             if (volume_up_active) {
 
                 if (!volume_up_held) {
@@ -753,6 +774,10 @@ bool process_record_user(
 
         /* =================================================
          * Previous Layer
+         *
+         * 0 -> 2
+         * 1 -> 0
+         * 2 -> 1
          * ================================================= */
 
         case LAYER_PREV:
@@ -765,7 +790,7 @@ bool process_record_user(
 
                 if (current_layer == 0) {
 
-                    layer_move(3);
+                    layer_move(2);
 
                 } else {
 
@@ -780,6 +805,10 @@ bool process_record_user(
 
         /* =================================================
          * Next Layer
+         *
+         * 0 -> 1
+         * 1 -> 2
+         * 2 -> 0
          * ================================================= */
 
         case LAYER_NEXT:
@@ -790,7 +819,7 @@ bool process_record_user(
                     get_highest_layer(layer_state);
 
 
-                if (current_layer >= 3) {
+                if (current_layer >= 2) {
 
                     layer_move(0);
 
@@ -812,6 +841,14 @@ bool process_record_user(
 
 /* =========================================================
  * Matrix scan
+ *
+ * Detects long presses on the volume keys.
+ *
+ * Volume Down:
+ *   hold 400 ms -> Previous Track
+ *
+ * Volume Up:
+ *   hold 400 ms -> Next Track
  * ========================================================= */
 
 void matrix_scan_user(void) {
