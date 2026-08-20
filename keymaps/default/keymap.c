@@ -1,6 +1,7 @@
 #include QMK_KEYBOARD_H
 #include <eeprom.h>
 #include "raw_hid.h"
+#include <stdint.h>
 
 #if __has_include("keymap.h")
 #    include "keymap.h"
@@ -36,7 +37,7 @@ enum custom_keycodes {
  * Each slot:
  *
  *   byte 0      = password length
- *   bytes 1-31  = password
+ *   bytes 1-29  = password
  *
  * Slot size = 32 bytes.
  *
@@ -58,7 +59,7 @@ enum custom_keycodes {
  * ========================================================= */
 
 #define PASS_SLOT_COUNT 7
-#define PASS_MAX_LEN    31
+#define PASS_MAX_LEN    29
 
 #define PASS_EEPROM_BASE 100
 #define PASS_SLOT_SIZE   32
@@ -80,23 +81,46 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
-    eeprom_address_t address =
+    uint16_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
+    /*
+     * QMK's EEPROM API expects pointers.
+     *
+     * The address is stored as an integer offset, so convert
+     * through uintptr_t first. This avoids the ARM compiler's
+     * int-to-pointer-cast warning.
+     */
+
+    uint8_t *eeprom_address =
+        (uint8_t *)(uintptr_t)address;
+
     pass_len =
-        eeprom_read_byte(address);
+        eeprom_read_byte(eeprom_address);
+
+    /*
+     * Protect against uninitialized/corrupt EEPROM.
+     */
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
-    eeprom_read_block(
-        pass_buf,
-        address + 1,
-        pass_len
-    );
+    /*
+     * Only read the password if one exists.
+     */
+
+    if (pass_len > 0) {
+
+        eeprom_read_block(
+            pass_buf,
+            eeprom_address + 1,
+            pass_len
+        );
+    }
 
     pass_buf[pass_len] = '\0';
+}
 
 
 /* =========================================================
@@ -117,19 +141,56 @@ static void pass_save_to_eeprom(
         len = PASS_MAX_LEN;
     }
 
-    eeprom_address_t address =
+    uint16_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
+    uint8_t *eeprom_address =
+        (uint8_t *)(uintptr_t)address;
+
+    /*
+     * Store password length.
+     */
+
     eeprom_update_byte(
-        address,
+        eeprom_address,
         len
     );
 
-    eeprom_update_block(
-        new_pass,
-        address + 1,
-        len
-    );
+    /*
+     * Clear unused bytes from the previous password.
+     *
+     * This prevents old password data from remaining in the
+     * unused portion of the EEPROM slot.
+     */
+
+    uint8_t blank = 0;
+
+    for (uint8_t i = len; i < PASS_MAX_LEN; i++) {
+
+        eeprom_update_byte(
+            eeprom_address + 1 + i,
+            blank
+        );
+    }
+
+    /*
+     * Store the new password.
+     */
+
+    if (len > 0) {
+
+        eeprom_update_block(
+            new_pass,
+            eeprom_address + 1,
+            len
+        );
+    }
+
+    /*
+     * Refresh RAM copy.
+     */
+
+    pass_load_from_eeprom(slot);
 }
 
 
@@ -217,8 +278,8 @@ void raw_hid_receive(
 
 
     /*
-     * Make sure we don't read past the
-     * received HID packet.
+     * Make sure we don't read beyond the received
+     * HID packet.
      */
 
     if (payload_len > (length - 3)) {
@@ -303,7 +364,6 @@ static uint8_t current_max_val =
  * ========================================================= */
 
 #define VOLUME_HOLD_TIME 400
-
 
 static uint16_t volume_down_timer = 0;
 static uint16_t volume_up_timer   = 0;
@@ -583,11 +643,11 @@ bool process_record_user(
     keyrecord_t *record
 ) {
 
-    /* =====================================================
-     * Password 1
-     * ===================================================== */
-
     switch (keycode) {
+
+        /* =================================================
+         * Password 1
+         * ================================================= */
 
         case PASS1:
 
@@ -694,20 +754,14 @@ bool process_record_user(
             }
 
 
-            /*
-             * Key released.
-             *
-             * If it wasn't held long enough:
-             * send Volume Down.
-             *
-             * If it was already held:
-             * track command was sent in matrix_scan_user().
-             */
-
             if (volume_down_active) {
 
-                if (!volume_down_held) {
+                /*
+                 * Short press:
+                 * Volume Down
+                 */
 
+                if (!volume_down_held) {
                     tap_code(KC_VOLD);
                 }
             }
@@ -737,20 +791,14 @@ bool process_record_user(
             }
 
 
-            /*
-             * Key released.
-             *
-             * If it wasn't held long enough:
-             * send Volume Up.
-             *
-             * If it was already held:
-             * track command was sent in matrix_scan_user().
-             */
-
             if (volume_up_active) {
 
-                if (!volume_up_held) {
+                /*
+                 * Short press:
+                 * Volume Up
+                 */
 
+                if (!volume_up_held) {
                     tap_code(KC_VOLU);
                 }
             }
@@ -836,7 +884,7 @@ bool process_record_user(
 void matrix_scan_user(void) {
 
     /* =====================================================
-     * Volume Down → Previous Track
+     * Volume Down -> Previous Track
      * ===================================================== */
 
     if (
@@ -853,7 +901,7 @@ void matrix_scan_user(void) {
 
 
     /* =====================================================
-     * Volume Up → Next Track
+     * Volume Up -> Next Track
      * ===================================================== */
 
     if (
