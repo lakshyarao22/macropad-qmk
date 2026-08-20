@@ -59,7 +59,7 @@ Each password key types the password stored in one of six EEPROM slots and then
 presses Enter. Passwords are limited to 31 ASCII characters and are stored
 unencrypted in the keyboard's EEPROM.
 
-### Layer 3 (Ice Blue)
+### Layer 3 (Crimson Red)
 
 ```
 Pass1     Pass2     Pass3
@@ -76,7 +76,7 @@ Layers 4 through 7 are currently unassigned and all keys are `KC_NO`.
 | 4 | Acid Green `(50, 255, 20)` |
 | 5 | Deep Violet `(120, 0, 255)` |
 | 6 | Warm White `(255, 180, 100)` |
-| 7 | Crimson Red `(255, 0, 20)` |
+| 7 | Ice Blue `(40, 180, 255)` |
 
 ## Building & Flashing
 

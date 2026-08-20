@@ -354,11 +354,11 @@ void raw_hid_receive(
  * Layer 0 = Cyberpunk Cyan
  * Layer 1 = Vaporwave Magenta
  * Layer 2 = Amber Gold
- * Layer 3 = Ice Blue
+ * Layer 3 = Crimson Red
  * Layer 4 = Acid Green
  * Layer 5 = Deep Violet
  * Layer 6 = Warm White
- * Layer 7 = Crimson Red
+ * Layer 7 = Ice Blue
  *
  * Maximum brightness = 100%.
  *
@@ -377,9 +377,9 @@ void raw_hid_receive(
 #define LAYER2_G       110
 #define LAYER2_B       0
 
-#define LAYER3_R       40
-#define LAYER3_G       180
-#define LAYER3_B       255
+#define LAYER3_R       255
+#define LAYER3_G       0
+#define LAYER3_B       20
 
 #define LAYER4_R       50
 #define LAYER4_G       255
@@ -393,9 +393,9 @@ void raw_hid_receive(
 #define LAYER6_G       180
 #define LAYER6_B       100
 
-#define LAYER7_R       255
-#define LAYER7_G       0
-#define LAYER7_B       20
+#define LAYER7_R       40
+#define LAYER7_G       180
+#define LAYER7_B       255
 
 
 /* =========================================================
@@ -756,7 +756,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *
      * Six password slots
      *
-     * Color: Ice Blue
+    * Color: Crimson Red
      * ===================================================== */
 
     [3] = LAYOUT(
@@ -836,7 +836,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-     * Layer 7 - Crimson Red
+    * Layer 7 - Ice Blue
      * ===================================================== */
 
     [7] = LAYOUT(
