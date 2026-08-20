@@ -1,4 +1,3 @@
-```c
 #include QMK_KEYBOARD_H
 #include <eeprom.h>
 #include "raw_hid.h"
@@ -875,4 +874,3 @@ void matrix_scan_user(void) {
 #ifdef OTHER_KEYMAP_C
 #    include OTHER_KEYMAP_C
 #endif
-```
