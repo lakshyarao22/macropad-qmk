@@ -124,8 +124,8 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
  * like maroon never blow out to full brightness either.
  * ========================= */
 
-#define BREATH_PERIOD_MS   3000  /* full cycle length (up+down), ms - lower = faster */
-#define BREATH_MIN_PERCENT 20    /* floor - never dims below this, all layers */
+#define BREATH_PERIOD_MS   10000  /* full cycle length (up+down), ms - lower = faster */
+#define BREATH_MIN_PERCENT 40    /* floor - never dims below this, all layers */
 
 #define BREATH_MIN_VAL ((BREATH_MIN_PERCENT * 255) / 100)
 #define PCT_TO_VAL(pct) ((pct) * 255 / 100)
@@ -291,12 +291,14 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
 
         /* -------------------------
-         * PASS key - sends whatever was stored via Raw HID.
-         * If nothing has been set yet, pass_len is 0 and this no-ops.
+         * PASS key - sends whatever was stored via Raw HID,
+         * followed by Enter. If nothing has been set yet,
+         * pass_len is 0 and this no-ops entirely.
          * ------------------------- */
         case PASS:
             if (pass_len > 0) {
                 send_string(pass_buf);
+                tap_code(KC_ENT);
             }
             return false;
     }
