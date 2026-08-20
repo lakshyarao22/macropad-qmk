@@ -501,7 +501,7 @@ void housekeeping_task_user(void) {
         );
 
 
-    rgblight_setrgb_noeeprom(
+    rgblight_setrgb(
         ((uint16_t)current_red * val) / 255,
         ((uint16_t)current_green * val) / 255,
         ((uint16_t)current_blue * val) / 255
@@ -536,7 +536,7 @@ void keyboard_post_init_user(void) {
     );
 
 
-    rgblight_setrgb_noeeprom(
+    rgblight_setrgb(
         current_red,
         current_green,
         current_blue
