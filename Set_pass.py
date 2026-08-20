@@ -1,53 +1,32 @@
-```python
 #!/usr/bin/env python3
 
 """
-Set one of the seven password slots on the macropad.
+Store one of seven passwords on the macropad over Raw HID.
 
-The password is entered locally and sent directly to the keyboard
-over Raw HID. It is never written to disk.
-
-Requires:
-    pip install hidapi
+The password is entered at the prompt and sent directly
+to the keyboard. It is never written to disk.
 
 Usage:
 
-    python3 set_pass.py
+    python3 set_password.py
 
-List HID devices:
-
-    python3 set_pass.py --list
+    python3 set_password.py --list
 """
 
 import sys
-from getpass import getpass
-
 
 try:
     import hid
 except ImportError:
-    sys.exit(
-        "Missing dependency.\n"
-        "Install it with:\n"
-        "    pip install hidapi"
-    )
+    sys.exit("Missing dependency. Install it with: pip install hidapi")
 
 
 # ============================================================
 # Keyboard USB IDs
 # ============================================================
 
-# Replace these with the VID/PID from your QMK keyboard.
-#
-# Your previous keymap.c used:
-#
-#   VENDOR_ID  = 0xFEED
-#   PRODUCT_ID = 0x0000
-#
-# If you have changed these in config.h, use the new values.
-
-VENDOR_ID = 0xFEED
-PRODUCT_ID = 0x0000
+VENDOR_ID = 0x1234       # <-- CHANGE THIS
+PRODUCT_ID = 0x5678      # <-- CHANGE THIS
 
 
 # ============================================================
@@ -59,34 +38,13 @@ USAGE = 0x61
 
 REPORT_LENGTH = 32
 
-
-# ============================================================
-# Password configuration
-# ============================================================
-
-PASS_SLOT_COUNT = 7
-
-# The Raw HID packet contains:
-#
-#   byte 0 = command
-#   byte 1 = slot
-#   byte 2 = password length
-#   byte 3+ = password
-#
-# With a 32-byte Raw HID report:
-#
-#   32 - 3 = 29 bytes available for password data.
-#
-# Therefore the provisioning script allows 29 ASCII characters.
-
-MAX_PASSWORD_LENGTH = 29
-
-
-# ============================================================
-# Commands
-# ============================================================
-
 CMD_SET_PASSWORD = 0x01
+
+PASSWORD_SLOTS = 7
+
+# [command][slot][length] = 3 bytes
+# 32-byte report leaves 29 bytes for password.
+MAX_PASSWORD_LENGTH = 29
 
 
 # ============================================================
@@ -101,33 +59,15 @@ def list_devices():
         print("No HID devices found.")
         return
 
-    print()
-
     for d in devices:
-
-        usage_page = d.get("usage_page")
-        usage = d.get("usage")
-
-        if usage_page is not None:
-            usage_page_text = f"{usage_page:#06x}"
-        else:
-            usage_page_text = "N/A"
-
-        if usage is not None:
-            usage_text = f"{usage:#04x}"
-        else:
-            usage_text = "N/A"
 
         print(
             f"VID={d['vendor_id']:#06x} "
             f"PID={d['product_id']:#06x} "
-            f"usage_page={usage_page_text} "
-            f"usage={usage_text} "
+            f"usage_page={d.get('usage_page', 0):#06x} "
+            f"usage={d.get('usage', 0):#04x} "
             f"product={d.get('product_string')}"
         )
-
-        print(f"  path={d.get('path')}")
-        print()
 
 
 # ============================================================
@@ -136,108 +76,135 @@ def list_devices():
 
 def find_raw_hid_path():
 
-    devices = hid.enumerate(
-        VENDOR_ID,
-        PRODUCT_ID
-    )
-
-    for d in devices:
+    for d in hid.enumerate(VENDOR_ID, PRODUCT_ID):
 
         if (
             d.get("usage_page") == USAGE_PAGE
             and d.get("usage") == USAGE
         ):
+
             return d["path"]
 
     raise RuntimeError(
         "Raw HID interface not found.\n\n"
-        "Check the following:\n"
-        "  1. VENDOR_ID and PRODUCT_ID are correct.\n"
-        "  2. RAW_ENABLE = yes is present in rules.mk.\n"
-        "  3. The firmware was rebuilt after enabling Raw HID.\n"
-        "  4. The new firmware has been flashed to the macropad.\n\n"
-        "Run:\n"
-        "    python3 set_pass.py --list\n"
-        "to inspect connected HID devices."
+        "Check VENDOR_ID/PRODUCT_ID in this script,\n"
+        "make sure RAW_ENABLE = yes is in rules.mk,\n"
+        "and make sure the firmware was reflashed."
     )
 
 
 # ============================================================
-# Ask which password slot to use
+# Ask for password slot
 # ============================================================
 
-def select_slot():
-
-    print()
-    print("Password slots:")
-    print()
-
-    for slot in range(1, PASS_SLOT_COUNT + 1):
-        print(f"  {slot}. Password {slot}")
-
-    print()
+def get_slot():
 
     while True:
 
-        value = input(
-            f"Select slot (1-{PASS_SLOT_COUNT}): "
-        ).strip()
-
         try:
-            slot = int(value)
+            slot = int(
+                input(
+                    "Enter password slot (1-7): "
+                )
+            )
+
         except ValueError:
-            print("Please enter a number.")
+
+            print("Please enter a number from 1 to 7.")
             continue
 
-        if 1 <= slot <= PASS_SLOT_COUNT:
+
+        if 1 <= slot <= PASSWORD_SLOTS:
             return slot - 1
 
-        print(
-            f"Please enter a number between "
-            f"1 and {PASS_SLOT_COUNT}."
-        )
+
+        print("Invalid slot. Choose 1-7.")
 
 
 # ============================================================
-# Read password
+# Main
 # ============================================================
 
-def read_password():
+def main():
 
-    password = getpass(
-        "Enter password to store: "
+    # --------------------------------------------------------
+    # Device listing
+    # --------------------------------------------------------
+
+    if "--list" in sys.argv:
+
+        list_devices()
+        return
+
+
+    # --------------------------------------------------------
+    # Select slot
+    # --------------------------------------------------------
+
+    slot = get_slot()
+
+
+    # --------------------------------------------------------
+    # Enter password
+    # --------------------------------------------------------
+
+    password = input(
+        f"Enter password for slot {slot + 1}: "
     )
 
+
     if not password:
-        raise ValueError(
-            "Empty password. Nothing was sent."
+
+        sys.exit(
+            "Empty password, nothing sent."
         )
+
+
+    # --------------------------------------------------------
+    # Check length
+    # --------------------------------------------------------
+
+    if len(password) > MAX_PASSWORD_LENGTH:
+
+        sys.exit(
+            f"Password too long. "
+            f"Maximum is {MAX_PASSWORD_LENGTH} characters."
+        )
+
+
+    # --------------------------------------------------------
+    # ASCII check
+    # --------------------------------------------------------
 
     try:
+
         password_bytes = password.encode("ascii")
+
     except UnicodeEncodeError:
-        raise ValueError(
-            "Password contains non-ASCII characters.\n"
-            "Please use ASCII characters only."
+
+        sys.exit(
+            "Password contains non-ASCII characters. "
+            "The current firmware uses send_string(), "
+            "so use ASCII characters only."
         )
 
-    if len(password_bytes) > MAX_PASSWORD_LENGTH:
-        raise ValueError(
-            f"Password is too long.\n"
-            f"Maximum length is "
-            f"{MAX_PASSWORD_LENGTH} characters."
-        )
 
-    return password_bytes
+    # --------------------------------------------------------
+    # Find Raw HID interface
+    # --------------------------------------------------------
+
+    try:
+
+        path = find_raw_hid_path()
+
+    except RuntimeError as e:
+
+        sys.exit(str(e))
 
 
-# ============================================================
-# Send password to macropad
-# ============================================================
-
-def set_password(slot, password_bytes):
-
-    path = find_raw_hid_path()
+    # --------------------------------------------------------
+    # Open device
+    # --------------------------------------------------------
 
     device = hid.device()
 
@@ -245,45 +212,42 @@ def set_password(slot, password_bytes):
 
         device.open_path(path)
 
+
         # ----------------------------------------------------
-        # Raw HID payload
+        # Build Raw HID packet
         #
-        # byte 0 = command
-        # byte 1 = slot
-        # byte 2 = password length
-        # byte 3+ = password
+        # Byte 0 = command
+        # Byte 1 = slot
+        # Byte 2 = password length
+        # Byte 3+ = password
         # ----------------------------------------------------
 
-        payload = bytes(
-            [
+        payload = (
+            bytes([
                 CMD_SET_PASSWORD,
                 slot,
-                len(password_bytes),
-            ]
-        ) + password_bytes
+                len(password_bytes)
+            ])
+            + password_bytes
+        )
 
 
         # ----------------------------------------------------
-        # hidapi expects the report ID as the first byte.
+        # Pad to 32 bytes.
         #
-        # Report ID = 0
+        # First byte is report ID = 0.
         # ----------------------------------------------------
 
         report = (
             bytes([0])
             + payload
-            + bytes(
-                REPORT_LENGTH - len(payload)
-            )
+            + bytes(REPORT_LENGTH - len(payload))
         )
 
 
-        if len(report) != REPORT_LENGTH + 1:
-            raise RuntimeError(
-                f"Unexpected HID report size: "
-                f"{len(report)}"
-            )
-
+        # ----------------------------------------------------
+        # Send
+        # ----------------------------------------------------
 
         device.write(report)
 
@@ -298,6 +262,16 @@ def set_password(slot, password_bytes):
         )
 
 
+        # ----------------------------------------------------
+        # Check acknowledgement
+        #
+        # Firmware sends:
+        #
+        # response[0] = CMD_SET_PASSWORD
+        # response[1] = slot
+        # response[2] = 1
+        # ----------------------------------------------------
+
         if (
             response
             and len(response) >= 3
@@ -306,25 +280,21 @@ def set_password(slot, password_bytes):
             and response[2] == 1
         ):
 
-            print()
             print(
-                f"Password {slot + 1} stored "
-                f"successfully."
+                f"Password successfully stored "
+                f"in slot {slot + 1}."
             )
 
         else:
 
-            print()
             print(
-                "No confirmation received from "
-                "the macropad."
+                "No confirmation received from the macropad."
             )
 
             print(
-                "Check the connection and make sure "
-                "the firmware is running the updated "
-                "Raw HID code."
+                "Check the connection and firmware."
             )
+
 
     finally:
 
@@ -332,54 +302,8 @@ def set_password(slot, password_bytes):
 
 
 # ============================================================
-# Main
+# Entry point
 # ============================================================
-
-def main():
-
-    if "--list" in sys.argv:
-
-        list_devices()
-        return
-
-
-    print()
-    print("===================================")
-    print("       Macropad Password Setup")
-    print("===================================")
-
-
-    try:
-
-        slot = select_slot()
-
-        print()
-
-        password_bytes = read_password()
-
-        print()
-        print(
-            f"Writing password to slot "
-            f"{slot + 1}..."
-        )
-
-        set_password(
-            slot,
-            password_bytes
-        )
-
-    except KeyboardInterrupt:
-
-        print()
-        print("Cancelled.")
-
-    except Exception as exc:
-
-        sys.exit(
-            f"\nError: {exc}"
-        )
-
 
 if __name__ == "__main__":
     main()
-```
