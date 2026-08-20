@@ -81,16 +81,14 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
-    uintptr_t address =
-        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
+    uint16_t address =
+        PASS_EEPROM_BASE +
+        (slot * PASS_SLOT_SIZE);
 
-    pass_len = eeprom_read_byte(
-        (const uint8_t *)address
-    );
-
-    /*
-     * EEPROM may contain 0xFF on first use.
-     */
+    pass_len =
+        eeprom_read_byte(
+            (uint8_t *)address
+        );
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
@@ -106,10 +104,6 @@ static void pass_load_from_eeprom(uint8_t slot) {
 }
 
 
-/* =========================================================
- * Save password to EEPROM
- * ========================================================= */
-
 static void pass_save_to_eeprom(
     uint8_t slot,
     const char *new_pass,
@@ -124,8 +118,9 @@ static void pass_save_to_eeprom(
         len = PASS_MAX_LEN;
     }
 
-    uintptr_t address =
-        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
+    uint16_t address =
+        PASS_EEPROM_BASE +
+        (slot * PASS_SLOT_SIZE);
 
     eeprom_update_byte(
         (uint8_t *)address,
@@ -137,18 +132,6 @@ static void pass_save_to_eeprom(
         (void *)(address + 1),
         len
     );
-
-    /*
-     * Update the RAM copy as well.
-     */
-
-    pass_len = len;
-
-    for (uint8_t i = 0; i < len; i++) {
-        pass_buf[i] = new_pass[i];
-    }
-
-    pass_buf[len] = '\0';
 }
 
 
