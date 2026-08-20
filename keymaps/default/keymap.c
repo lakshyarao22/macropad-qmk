@@ -32,41 +32,50 @@ enum custom_keycodes {
 /* =========================================================
  * Password storage
  *
- * Seven password slots.
+ * 7 password slots
  *
  * Each slot:
  *
- *   byte 0      = password length
- *   bytes 1-29  = password
+ *   byte 0       = password length
+ *   bytes 1-31   = password
  *
- * Slot size = 32 bytes.
+ * Slot size = 32 bytes
  *
- * We start at logical EEPROM address 256 to leave the
- * beginning of the EEPROM area available to QMK.
+ * Slot 1 = EEPROM 100-131
+ * Slot 2 = EEPROM 132-163
+ * Slot 3 = EEPROM 164-195
+ * Slot 4 = EEPROM 196-227
+ * Slot 5 = EEPROM 228-259
+ * Slot 6 = EEPROM 260-291
+ * Slot 7 = EEPROM 292-323
  *
- * Slot 1 -> 256 - 287
- * Slot 2 -> 288 - 319
- * Slot 3 -> 320 - 351
- * Slot 4 -> 352 - 383
- * Slot 5 -> 384 - 415
- * Slot 6 -> 416 - 447
- * Slot 7 -> 448 - 479
- *
- * Passwords are written later using Raw HID.
- *
- * IMPORTANT:
- * EEPROM is not encrypted.
+ * EEPROM is NOT encrypted.
  * ========================================================= */
 
-#define PASS_SLOT_COUNT  7
-#define PASS_MAX_LEN     29
+#define PASS_SLOT_COUNT 7
+#define PASS_MAX_LEN    31
 
-#define PASS_EEPROM_BASE 256
+#define PASS_EEPROM_BASE 100
 #define PASS_SLOT_SIZE   32
 
 
 static char pass_buf[PASS_MAX_LEN + 1];
 static uint8_t pass_len = 0;
+
+
+/* =========================================================
+ * EEPROM helper
+ *
+ * QMK's current EEPROM API expects pointers.
+ *
+ * The RP2040 EEPROM implementation exposes the EEPROM
+ * memory through the address space, so we convert the
+ * numeric offset to a pointer only at the API boundary.
+ * ========================================================= */
+
+static uint8_t *pass_eeprom_ptr(uint16_t address) {
+    return (uint8_t *)(uintptr_t)address;
+}
 
 
 /* =========================================================
@@ -81,28 +90,40 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
+
     uint16_t address =
         PASS_EEPROM_BASE +
-        (slot * PASS_SLOT_SIZE);
+        ((uint16_t)slot * PASS_SLOT_SIZE);
+
 
     pass_len =
         eeprom_read_byte(
-            (uint8_t *)address
+            pass_eeprom_ptr(address)
         );
+
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
-    eeprom_read_block(
-        pass_buf,
-        (const void *)(address + 1),
-        pass_len
-    );
+
+    if (pass_len > 0) {
+
+        eeprom_read_block(
+            pass_buf,
+            pass_eeprom_ptr(address + 1),
+            pass_len
+        );
+    }
+
 
     pass_buf[pass_len] = '\0';
 }
 
+
+/* =========================================================
+ * Save password to EEPROM
+ * ========================================================= */
 
 static void pass_save_to_eeprom(
     uint8_t slot,
@@ -114,24 +135,31 @@ static void pass_save_to_eeprom(
         return;
     }
 
+
     if (len > PASS_MAX_LEN) {
         len = PASS_MAX_LEN;
     }
 
+
     uint16_t address =
         PASS_EEPROM_BASE +
-        (slot * PASS_SLOT_SIZE);
+        ((uint16_t)slot * PASS_SLOT_SIZE);
+
 
     eeprom_update_byte(
-        (uint8_t *)address,
+        pass_eeprom_ptr(address),
         len
     );
 
-    eeprom_update_block(
-        new_pass,
-        (void *)(address + 1),
-        len
-    );
+
+    if (len > 0) {
+
+        eeprom_update_block(
+            new_pass,
+            pass_eeprom_ptr(address + 1),
+            len
+        );
+    }
 }
 
 
@@ -145,70 +173,89 @@ static void pass_send_slot(uint8_t slot) {
         return;
     }
 
+
     pass_load_from_eeprom(slot);
 
-    if (pass_len == 0) {
-        return;
+
+    if (pass_len > 0) {
+
+        send_string(pass_buf);
+
+        tap_code(KC_ENT);
     }
-
-    send_string(pass_buf);
-
-    tap_code(KC_ENT);
 }
 
 
 /* =========================================================
- * Raw HID
- *
- * Packet:
- *
- *   data[0] = command
- *   data[1] = slot
- *   data[2] = password length
- *   data[3...] = password
- *
- * Example:
- *
- *   01 00 08 password
- *
- * means:
- *
- *   command = SET_PASSWORD
- *   slot    = 0
- *   length  = 8
+ * Raw HID password provisioning
  * ========================================================= */
 
 #ifdef RAW_ENABLE
 
+#define RAW_HID_PACKET_SIZE 32
+
 enum raw_hid_commands {
-    CMD_SET_PASSWORD = 0x01,
+    CMD_SET_PASSWORD = 0x01
 };
 
-void raw_hid_receive(uint8_t *data, uint8_t length) {
+
+void raw_hid_receive(
+    uint8_t *data,
+    uint8_t length
+) {
+
+    /*
+     * Minimum packet:
+     *
+     * byte 0 = command
+     * byte 1 = slot
+     * byte 2 = password length
+     */
 
     if (length < 3) {
         return;
     }
 
-    uint8_t cmd        = data[0];
-    uint8_t slot       = data[1];
-    uint8_t payload_len = data[2];
+
+    uint8_t cmd =
+        data[0];
+
+
+    uint8_t slot =
+        data[1];
+
+
+    uint8_t payload_len =
+        data[2];
+
 
     if (cmd != CMD_SET_PASSWORD) {
         return;
     }
 
+
     if (slot >= PASS_SLOT_COUNT) {
         return;
     }
+
+
+    /*
+     * Never exceed our maximum password length.
+     */
 
     if (payload_len > PASS_MAX_LEN) {
         payload_len = PASS_MAX_LEN;
     }
 
+
+    /*
+     * Never read outside the received HID packet.
+     */
+
     if (payload_len > (length - 3)) {
         payload_len = length - 3;
     }
+
 
     pass_save_to_eeprom(
         slot,
@@ -216,25 +263,26 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
         payload_len
     );
 
+
     /*
-     * QMK Raw HID requires exactly 32 bytes.
+     * Send acknowledgement.
      *
-     * Response:
-     *
-     * byte 0 = command
-     * byte 1 = slot
-     * byte 2 = success
+     * response[0] = command
+     * response[1] = slot
+     * response[2] = success
      */
 
-    uint8_t response[RAW_EPSIZE] = {0};
+    uint8_t response[RAW_HID_PACKET_SIZE] = {0};
+
 
     response[0] = CMD_SET_PASSWORD;
     response[1] = slot;
     response[2] = 1;
 
+
     raw_hid_send(
         response,
-        RAW_EPSIZE
+        RAW_HID_PACKET_SIZE
     );
 }
 
@@ -263,7 +311,7 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 
 
 /* =========================================================
- * Breathing RGB
+ * RGB breathing
  * ========================================================= */
 
 #define BREATH_PERIOD_MS    10000
@@ -279,24 +327,21 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
 static uint8_t current_hue =
     LAYER0_HUE;
 
+
 static uint8_t current_sat =
     LAYER0_SAT;
+
 
 static uint8_t current_max_val =
     PCT_TO_VAL(LAYER0_MAXPCT);
 
 
 /* =========================================================
- * Volume / track handling
- *
- * Tap:
- *   Volume Down / Volume Up
- *
- * Hold:
- *   Previous Track / Next Track
+ * Volume / track hold handling
  * ========================================================= */
 
 #define VOLUME_HOLD_TIME 400
+
 
 static uint16_t volume_down_timer = 0;
 static uint16_t volume_up_timer   = 0;
@@ -310,49 +355,68 @@ static bool volume_up_held   = false;
 
 /* =========================================================
  * RGB housekeeping
- *
- * This directly controls the three WS2812 LEDs.
- *
- * We deliberately do NOT use UG_TOGG here because
- * UG_TOGG controls the same LEDs that we use for layer
- * indication.
  * ========================================================= */
 
 void housekeeping_task_user(void) {
 
     static uint32_t last_update = 0;
 
+
     if (timer_elapsed32(last_update) < 20) {
         return;
     }
 
+
     last_update = timer_read32();
 
-    uint16_t half =
-        BREATH_PERIOD_MS / 2;
 
-    uint16_t phase =
+    uint32_t phase =
         timer_read32() % BREATH_PERIOD_MS;
 
-    uint16_t position =
-        (phase < half)
-            ? phase
-            : (BREATH_PERIOD_MS - phase);
+
+    uint32_t half =
+        BREATH_PERIOD_MS / 2;
+
+
+    uint32_t position;
+
+
+    if (phase < half) {
+
+        position = phase;
+
+    } else {
+
+        position =
+            BREATH_PERIOD_MS - phase;
+    }
+
 
     uint8_t val =
         BREATH_MIN_VAL +
         (uint8_t)(
-            (uint32_t)(
+            ((uint32_t)(
                 current_max_val -
                 BREATH_MIN_VAL
-            ) * position / half
+            ) * position) / half
         );
 
-    rgblight_sethsv_noeeprom(
-        current_hue,
-        current_sat,
-        val
-    );
+
+    /*
+     * Only update the RGB LEDs when RGB is enabled.
+     *
+     * This prevents the housekeeping task from fighting
+     * with UG_TOGG.
+     */
+
+    if (rgblight_is_enabled()) {
+
+        rgblight_sethsv_noeeprom(
+            current_hue,
+            current_sat,
+            val
+        );
+    }
 }
 
 
@@ -363,26 +427,23 @@ void housekeeping_task_user(void) {
 void keyboard_post_init_user(void) {
 
     /*
-     * Load first password slot.
+     * Load slot 0 initially.
      */
 
     pass_load_from_eeprom(0);
 
+
     /*
-     * Enable RGB.
+     * Start RGB.
      */
 
     rgblight_enable_noeeprom();
 
-    /*
-     * Static mode.
-     *
-     * Our housekeeping_task_user() controls brightness.
-     */
 
     rgblight_mode_noeeprom(
         RGBLIGHT_MODE_STATIC_LIGHT
     );
+
 
     rgblight_sethsv_noeeprom(
         current_hue,
@@ -458,6 +519,7 @@ layer_state_t layer_state_set_user(
             break;
     }
 
+
     return state;
 }
 
@@ -490,21 +552,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     /* =====================================================
      * Layer 1
-     *
-     * Tap volume keys:
-     *
-     *   Left  = Volume Down
-     *   Center = Mute
-     *   Right = Volume Up
-     *
-     * Hold:
-     *
-     *   Left  = Previous Track
-     *   Right = Next Track
-     *
-     * Bottom middle/right:
-     *
-     *   Brightness Down / Brightness Up
      * ===================================================== */
 
     [1] = LAYOUT(
@@ -525,8 +572,6 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     /* =====================================================
      * Layer 2
-     *
-     * Passwords
      * ===================================================== */
 
     [2] = LAYOUT(
@@ -547,20 +592,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     /* =====================================================
      * Layer 3
-     *
-     * RGB controls
-     *
-     * IMPORTANT:
-     *
-     * UG_TOGG is intentionally removed.
-     *
-     * The RGB LEDs are the layer indicators, so toggling
-     * RGB off would also remove the layer indication.
      * ===================================================== */
 
     [3] = LAYOUT(
 
-        KC_NO,
+        UG_TOGG,
         UG_NEXT,
         UG_HUEU,
 
@@ -586,10 +622,6 @@ bool process_record_user(
 
     switch (keycode) {
 
-        /* =================================================
-         * Password 1
-         * ================================================= */
-
         case PASS1:
 
             if (record->event.pressed) {
@@ -598,10 +630,6 @@ bool process_record_user(
 
             return false;
 
-
-        /* =================================================
-         * Password 2
-         * ================================================= */
 
         case PASS2:
 
@@ -612,10 +640,6 @@ bool process_record_user(
             return false;
 
 
-        /* =================================================
-         * Password 3
-         * ================================================= */
-
         case PASS3:
 
             if (record->event.pressed) {
@@ -624,10 +648,6 @@ bool process_record_user(
 
             return false;
 
-
-        /* =================================================
-         * Password 4
-         * ================================================= */
 
         case PASS4:
 
@@ -638,10 +658,6 @@ bool process_record_user(
             return false;
 
 
-        /* =================================================
-         * Password 5
-         * ================================================= */
-
         case PASS5:
 
             if (record->event.pressed) {
@@ -651,10 +667,6 @@ bool process_record_user(
             return false;
 
 
-        /* =================================================
-         * Password 6
-         * ================================================= */
-
         case PASS6:
 
             if (record->event.pressed) {
@@ -663,10 +675,6 @@ bool process_record_user(
 
             return false;
 
-
-        /* =================================================
-         * Password 7
-         * ================================================= */
 
         case PASS7:
 
@@ -694,12 +702,15 @@ bool process_record_user(
                 return false;
             }
 
+
             if (volume_down_active) {
 
                 if (!volume_down_held) {
+
                     tap_code(KC_VOLD);
                 }
             }
+
 
             volume_down_active = false;
             volume_down_held = false;
@@ -724,12 +735,15 @@ bool process_record_user(
                 return false;
             }
 
+
             if (volume_up_active) {
 
                 if (!volume_up_held) {
+
                     tap_code(KC_VOLU);
                 }
             }
+
 
             volume_up_active = false;
             volume_up_held = false;
@@ -747,6 +761,7 @@ bool process_record_user(
 
                 uint8_t current_layer =
                     get_highest_layer(layer_state);
+
 
                 if (current_layer == 0) {
 
@@ -774,6 +789,7 @@ bool process_record_user(
                 uint8_t current_layer =
                     get_highest_layer(layer_state);
 
+
                 if (current_layer >= 3) {
 
                     layer_move(0);
@@ -789,23 +805,19 @@ bool process_record_user(
             return false;
     }
 
+
     return true;
 }
 
 
 /* =========================================================
  * Matrix scan
- *
- * Volume:
- *
- *   Tap  = Volume
- *   Hold = Track
  * ========================================================= */
 
 void matrix_scan_user(void) {
 
     /* =====================================================
-     * Volume Down -> Previous Track
+     * Volume Down → Previous Track
      * ===================================================== */
 
     if (
@@ -822,7 +834,7 @@ void matrix_scan_user(void) {
 
 
     /* =====================================================
-     * Volume Up -> Next Track
+     * Volume Up → Next Track
      * ===================================================== */
 
     if (
