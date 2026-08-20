@@ -1,871 +1,361 @@
-#include QMK_KEYBOARD_H
-#include <eeprom.h>
-#include "raw_hid.h"
-#include <stdint.h>
+#!/usr/bin/env python3
 
-#if __has_include("keymap.h")
-#    include "keymap.h"
-#endif
+import sys
+import hid
 
 
-/* =========================================================
- * Custom keycodes
- * ========================================================= */
+# ============================================================
+# Macropad USB / Raw HID configuration
+# ============================================================
 
-enum custom_keycodes {
-    PASS1 = SAFE_RANGE,
-    PASS2,
-    PASS3,
-    PASS4,
-    PASS5,
-    PASS6,
-    PASS7,
+VENDOR_ID = 0xFEED
+PRODUCT_ID = 0x0000
 
-    VOL_DOWN_TRACK,
-    VOL_UP_TRACK,
+USAGE_PAGE = 0xFF60
+USAGE = 0x61
 
-    LAYER_PREV,
-    LAYER_NEXT
-};
+REPORT_LENGTH = 32
 
+CMD_SET_PASSWORD = 0x01
 
-/* =========================================================
- * Password storage
- *
- * Seven password slots.
- *
- * Each slot:
- *
- *   byte 0      = password length
- *   bytes 1-29  = password
- *
- * Slot size = 32 bytes.
- *
- * We start at logical EEPROM address 256 to leave the
- * beginning of the EEPROM area available to QMK.
- *
- * Slot 1 -> 256 - 287
- * Slot 2 -> 288 - 319
- * Slot 3 -> 320 - 351
- * Slot 4 -> 352 - 383
- * Slot 5 -> 384 - 415
- * Slot 6 -> 416 - 447
- * Slot 7 -> 448 - 479
- *
- * Passwords are written later using Raw HID.
- *
- * IMPORTANT:
- * EEPROM is not encrypted.
- * ========================================================= */
+MAX_PASSWORD_LENGTH = 31
 
-#define PASS_SLOT_COUNT  7
-#define PASS_MAX_LEN     29
 
-#define PASS_EEPROM_BASE 256
-#define PASS_SLOT_SIZE   32
+# ============================================================
+# List HID devices
+# ============================================================
 
+def list_devices():
 
-static char pass_buf[PASS_MAX_LEN + 1];
-static uint8_t pass_len = 0;
+    devices = hid.enumerate()
 
+    if not devices:
+        print("No HID devices found.")
+        return
 
-/* =========================================================
- * Load password from EEPROM
- * ========================================================= */
+    for d in devices:
 
-static void pass_load_from_eeprom(uint8_t slot) {
+        print(
+            f"VID={d['vendor_id']:#06x} "
+            f"PID={d['product_id']:#06x} "
+            f"usage_page={d.get('usage_page', 0):#06x} "
+            f"usage={d.get('usage', 0):#04x} "
+            f"product={d.get('product_string')}"
+        )
 
-    if (slot >= PASS_SLOT_COUNT) {
-        pass_len = 0;
-        pass_buf[0] = '\0';
-        return;
-    }
 
-    uintptr_t address =
-        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
+# ============================================================
+# Find QMK Raw HID interface
+# ============================================================
 
-    pass_len = eeprom_read_byte(
-        (const uint8_t *)address
-    );
+def find_raw_hid():
 
-    /*
-     * EEPROM may contain 0xFF on first use.
-     */
-
-    if (pass_len > PASS_MAX_LEN) {
-        pass_len = 0;
-    }
-
-    eeprom_read_block(
-        pass_buf,
-        (const void *)(address + 1),
-        pass_len
-    );
-
-    pass_buf[pass_len] = '\0';
-}
-
-
-/* =========================================================
- * Save password to EEPROM
- * ========================================================= */
-
-static void pass_save_to_eeprom(
-    uint8_t slot,
-    const char *new_pass,
-    uint8_t len
-) {
-
-    if (slot >= PASS_SLOT_COUNT) {
-        return;
-    }
-
-    if (len > PASS_MAX_LEN) {
-        len = PASS_MAX_LEN;
-    }
-
-    uintptr_t address =
-        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
-
-    eeprom_update_byte(
-        (uint8_t *)address,
-        len
-    );
-
-    eeprom_update_block(
-        new_pass,
-        (void *)(address + 1),
-        len
-    );
-
-    /*
-     * Update the RAM copy as well.
-     */
-
-    pass_len = len;
-
-    for (uint8_t i = 0; i < len; i++) {
-        pass_buf[i] = new_pass[i];
-    }
-
-    pass_buf[len] = '\0';
-}
-
-
-/* =========================================================
- * Send password from EEPROM slot
- * ========================================================= */
-
-static void pass_send_slot(uint8_t slot) {
-
-    if (slot >= PASS_SLOT_COUNT) {
-        return;
-    }
-
-    pass_load_from_eeprom(slot);
-
-    if (pass_len == 0) {
-        return;
-    }
-
-    send_string(pass_buf);
-
-    tap_code(KC_ENT);
-}
-
-
-/* =========================================================
- * Raw HID
- *
- * Packet:
- *
- *   data[0] = command
- *   data[1] = slot
- *   data[2] = password length
- *   data[3...] = password
- *
- * Example:
- *
- *   01 00 08 password
- *
- * means:
- *
- *   command = SET_PASSWORD
- *   slot    = 0
- *   length  = 8
- * ========================================================= */
-
-#ifdef RAW_ENABLE
-
-enum raw_hid_commands {
-    CMD_SET_PASSWORD = 0x01
-};
-
-
-void raw_hid_receive(
-    uint8_t *data,
-    uint8_t length
-) {
-
-    if (length < 3) {
-        return;
-    }
-
-    uint8_t cmd = data[0];
-    uint8_t slot = data[1];
-    uint8_t payload_len = data[2];
-
-    if (cmd != CMD_SET_PASSWORD) {
-        return;
-    }
-
-    if (slot >= PASS_SLOT_COUNT) {
-        return;
-    }
-
-    /*
-     * Maximum password size.
-     */
-
-    if (payload_len > PASS_MAX_LEN) {
-        payload_len = PASS_MAX_LEN;
-    }
-
-    /*
-     * Never read beyond the received HID packet.
-     */
-
-    if (payload_len > (length - 3)) {
-        payload_len = length - 3;
-    }
-
-    pass_save_to_eeprom(
-        slot,
-        (const char *)&data[3],
-        payload_len
-    );
-
-    /*
-     * Send acknowledgement.
-     *
-     * response[0] = command
-     * response[1] = slot
-     * response[2] = success
-     */
-
-    uint8_t response[32] = {0};
-
-    response[0] = CMD_SET_PASSWORD;
-    response[1] = slot;
-    response[2] = 1;
-
-    raw_hid_send(
-        response,
-        sizeof(response)
-    );
-}
-
-#endif
-
-
-/* =========================================================
- * Layer colors
- * ========================================================= */
-
-#define LAYER0_HUE     0
-#define LAYER0_SAT     220
-#define LAYER0_MAXPCT  65
-
-#define LAYER1_HUE     191
-#define LAYER1_SAT     200
-#define LAYER1_MAXPCT  100
-
-#define LAYER2_HUE     100
-#define LAYER2_SAT     210
-#define LAYER2_MAXPCT  100
-
-#define LAYER3_HUE     128
-#define LAYER3_SAT     255
-#define LAYER3_MAXPCT  100
-
-
-/* =========================================================
- * Breathing RGB
- * ========================================================= */
-
-#define BREATH_PERIOD_MS    10000
-#define BREATH_MIN_PERCENT  40
-
-#define BREATH_MIN_VAL \
-    ((BREATH_MIN_PERCENT * 255) / 100)
-
-#define PCT_TO_VAL(pct) \
-    ((pct) * 255 / 100)
-
-
-static uint8_t current_hue =
-    LAYER0_HUE;
-
-static uint8_t current_sat =
-    LAYER0_SAT;
-
-static uint8_t current_max_val =
-    PCT_TO_VAL(LAYER0_MAXPCT);
-
-
-/* =========================================================
- * Volume / track handling
- *
- * Tap:
- *   Volume Down / Volume Up
- *
- * Hold:
- *   Previous Track / Next Track
- * ========================================================= */
-
-#define VOLUME_HOLD_TIME 400
-
-static uint16_t volume_down_timer = 0;
-static uint16_t volume_up_timer   = 0;
-
-static bool volume_down_active = false;
-static bool volume_up_active   = false;
-
-static bool volume_down_held = false;
-static bool volume_up_held   = false;
-
-
-/* =========================================================
- * RGB housekeeping
- *
- * This directly controls the three WS2812 LEDs.
- *
- * We deliberately do NOT use UG_TOGG here because
- * UG_TOGG controls the same LEDs that we use for layer
- * indication.
- * ========================================================= */
-
-void housekeeping_task_user(void) {
-
-    static uint32_t last_update = 0;
-
-    if (timer_elapsed32(last_update) < 20) {
-        return;
-    }
-
-    last_update = timer_read32();
-
-    uint16_t half =
-        BREATH_PERIOD_MS / 2;
-
-    uint16_t phase =
-        timer_read32() % BREATH_PERIOD_MS;
-
-    uint16_t position =
-        (phase < half)
-            ? phase
-            : (BREATH_PERIOD_MS - phase);
-
-    uint8_t val =
-        BREATH_MIN_VAL +
-        (uint8_t)(
-            (uint32_t)(
-                current_max_val -
-                BREATH_MIN_VAL
-            ) * position / half
-        );
-
-    rgblight_sethsv_noeeprom(
-        current_hue,
-        current_sat,
-        val
-    );
-}
-
-
-/* =========================================================
- * Keyboard initialization
- * ========================================================= */
-
-void keyboard_post_init_user(void) {
-
-    /*
-     * Load first password slot.
-     */
-
-    pass_load_from_eeprom(0);
-
-    /*
-     * Enable RGB.
-     */
-
-    rgblight_enable_noeeprom();
-
-    /*
-     * Static mode.
-     *
-     * Our housekeeping_task_user() controls brightness.
-     */
-
-    rgblight_mode_noeeprom(
-        RGBLIGHT_MODE_STATIC_LIGHT
-    );
-
-    rgblight_sethsv_noeeprom(
-        current_hue,
-        current_sat,
-        current_max_val
-    );
-}
-
-
-/* =========================================================
- * Layer RGB
- * ========================================================= */
-
-layer_state_t layer_state_set_user(
-    layer_state_t state
-) {
-
-    switch (get_highest_layer(state)) {
-
-        case 0:
-
-            current_hue =
-                LAYER0_HUE;
-
-            current_sat =
-                LAYER0_SAT;
-
-            current_max_val =
-                PCT_TO_VAL(LAYER0_MAXPCT);
-
-            break;
-
-
-        case 1:
-
-            current_hue =
-                LAYER1_HUE;
-
-            current_sat =
-                LAYER1_SAT;
-
-            current_max_val =
-                PCT_TO_VAL(LAYER1_MAXPCT);
-
-            break;
-
-
-        case 2:
-
-            current_hue =
-                LAYER2_HUE;
-
-            current_sat =
-                LAYER2_SAT;
-
-            current_max_val =
-                PCT_TO_VAL(LAYER2_MAXPCT);
-
-            break;
-
-
-        case 3:
-
-            current_hue =
-                LAYER3_HUE;
-
-            current_sat =
-                LAYER3_SAT;
-
-            current_max_val =
-                PCT_TO_VAL(LAYER3_MAXPCT);
-
-            break;
-    }
-
-    return state;
-}
-
-
-/* =========================================================
- * Keymaps
- * ========================================================= */
-
-const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-
-    /* =====================================================
-     * Layer 0
-     * ===================================================== */
-
-    [0] = LAYOUT(
-
-        KC_F13,
-        KC_F14,
-        KC_F15,
-
-        KC_F16,
-        KC_F17,
-        KC_F18,
-
-        LAYER_PREV,
-        KC_F19,
-        LAYER_NEXT
-    ),
-
-
-    /* =====================================================
-     * Layer 1
-     *
-     * Tap volume keys:
-     *
-     *   Left  = Volume Down
-     *   Center = Mute
-     *   Right = Volume Up
-     *
-     * Hold:
-     *
-     *   Left  = Previous Track
-     *   Right = Next Track
-     *
-     * Bottom middle/right:
-     *
-     *   Brightness Down / Brightness Up
-     * ===================================================== */
-
-    [1] = LAYOUT(
-
-        VOL_DOWN_TRACK,
-        KC_MUTE,
-        VOL_UP_TRACK,
-
-        KC_BRID,
-        KC_MPLY,
-        KC_BRIU,
-
-        LAYER_PREV,
-        KC_NO,
-        LAYER_NEXT
-    ),
-
-
-    /* =====================================================
-     * Layer 2
-     *
-     * Passwords
-     * ===================================================== */
-
-    [2] = LAYOUT(
-
-        PASS1,
-        PASS2,
-        PASS3,
-
-        PASS4,
-        PASS5,
-        PASS6,
-
-        LAYER_PREV,
-        PASS7,
-        LAYER_NEXT
-    ),
-
-
-    /* =====================================================
-     * Layer 3
-     *
-     * RGB controls
-     *
-     * IMPORTANT:
-     *
-     * UG_TOGG is intentionally removed.
-     *
-     * The RGB LEDs are the layer indicators, so toggling
-     * RGB off would also remove the layer indication.
-     * ===================================================== */
-
-    [3] = LAYOUT(
-
-        KC_NO,
-        UG_NEXT,
-        UG_HUEU,
-
-        UG_VALD,
-        UG_VALU,
-        UG_HUED,
-
-        LAYER_PREV,
-        UG_SPDU,
-        LAYER_NEXT
+    devices = hid.enumerate(
+        VENDOR_ID,
+        PRODUCT_ID
     )
-};
 
+    for d in devices:
 
-/* =========================================================
- * Process keycodes
- * ========================================================= */
+        if (
+            d.get("usage_page") == USAGE_PAGE
+            and
+            d.get("usage") == USAGE
+        ):
 
-bool process_record_user(
-    uint16_t keycode,
-    keyrecord_t *record
-) {
+            return d
 
-    switch (keycode) {
+    return None
 
-        /* =================================================
-         * Password 1
-         * ================================================= */
 
-        case PASS1:
+# ============================================================
+# Send password
+# ============================================================
 
-            if (record->event.pressed) {
-                pass_send_slot(0);
-            }
+def set_password(slot, password):
 
-            return false;
+    if slot < 1 or slot > 7:
 
+        print("Slot must be between 1 and 7.")
+        return False
 
-        /* =================================================
-         * Password 2
-         * ================================================= */
 
-        case PASS2:
+    if not password:
 
-            if (record->event.pressed) {
-                pass_send_slot(1);
-            }
+        print("Password cannot be empty.")
+        return False
 
-            return false;
 
+    encoded = password.encode("ascii")
 
-        /* =================================================
-         * Password 3
-         * ================================================= */
 
-        case PASS3:
+    if len(encoded) > MAX_PASSWORD_LENGTH:
 
-            if (record->event.pressed) {
-                pass_send_slot(2);
-            }
+        print(
+            f"Password too long. "
+            f"Maximum is {MAX_PASSWORD_LENGTH} ASCII characters."
+        )
 
-            return false;
+        return False
 
 
-        /* =================================================
-         * Password 4
-         * ================================================= */
+    interface = find_raw_hid()
 
-        case PASS4:
 
-            if (record->event.pressed) {
-                pass_send_slot(3);
-            }
+    if interface is None:
 
-            return false;
+        print()
+        print("Raw HID interface not found.")
+        print()
+        print(
+            "Expected:"
+        )
+        print(
+            f"VID=0x{VENDOR_ID:04X} "
+            f"PID=0x{PRODUCT_ID:04X} "
+            f"usage_page=0x{USAGE_PAGE:04X} "
+            f"usage=0x{USAGE:02X}"
+        )
 
+        return False
 
-        /* =================================================
-         * Password 5
-         * ================================================= */
 
-        case PASS5:
+    print()
+    print(
+        f"Using Raw HID interface: "
+        f"VID=0x{interface['vendor_id']:04X} "
+        f"PID=0x{interface['product_id']:04X}"
+    )
 
-            if (record->event.pressed) {
-                pass_send_slot(4);
-            }
+    print(
+        f"Usage Page: 0x{interface['usage_page']:04X}"
+    )
 
-            return false;
+    print(
+        f"Usage: 0x{interface['usage']:02X}"
+    )
 
 
-        /* =================================================
-         * Password 6
-         * ================================================= */
+    device = hid.device()
 
-        case PASS6:
 
-            if (record->event.pressed) {
-                pass_send_slot(5);
-            }
+    try:
 
-            return false;
+        device.open_path(interface["path"])
 
 
-        /* =================================================
-         * Password 7
-         * ================================================= */
+        # ====================================================
+        # QMK Raw HID packet
+        #
+        # byte 0 = command
+        # byte 1 = slot
+        # byte 2 = password length
+        # byte 3+ = password
+        #
+        # HID report itself has a leading Report ID byte = 0
+        #
+        # Total report sent to hidapi:
+        #   1 byte report ID
+        #   32 bytes Raw HID payload
+        # ====================================================
 
-        case PASS7:
+        payload = (
+            bytes([
+                CMD_SET_PASSWORD,
+                slot - 1,
+                len(encoded)
+            ])
+            + encoded
+        )
 
-            if (record->event.pressed) {
-                pass_send_slot(6);
-            }
 
-            return false;
+        payload += bytes(
+            REPORT_LENGTH - len(payload)
+        )
 
 
-        /* =================================================
-         * Volume Down / Previous Track
-         * ================================================= */
+        report = bytes([0]) + payload
 
-        case VOL_DOWN_TRACK:
 
-            if (record->event.pressed) {
+        print()
+        print(
+            f"Sending password to slot {slot}..."
+        )
 
-                volume_down_timer =
-                    timer_read();
 
-                volume_down_active = true;
-                volume_down_held = false;
+        device.write(report)
 
-                return false;
-            }
 
-            if (volume_down_active) {
+        # ====================================================
+        # Wait for QMK acknowledgement
+        # ====================================================
 
-                if (!volume_down_held) {
-                    tap_code(KC_VOLD);
-                }
-            }
+        response = device.read(
+            REPORT_LENGTH,
+            timeout_ms=1500
+        )
 
-            volume_down_active = false;
-            volume_down_held = false;
 
-            return false;
+        print(
+            f"Raw response: {response}"
+        )
 
 
-        /* =================================================
-         * Volume Up / Next Track
-         * ================================================= */
+        if not response:
 
-        case VOL_UP_TRACK:
+            print()
+            print(
+                "No response received from the macropad."
+            )
 
-            if (record->event.pressed) {
+            print(
+                "Check that RAW_ENABLE = yes is present "
+                "in rules.mk and that the firmware was reflashed."
+            )
 
-                volume_up_timer =
-                    timer_read();
+            return False
 
-                volume_up_active = true;
-                volume_up_held = false;
 
-                return false;
-            }
+        # ----------------------------------------------------
+        # Depending on the HID backend, the returned data may
+        # or may not include a Report ID byte.
+        #
+        # Therefore support both:
+        #
+        #   [CMD, SLOT, ACK, ...]
+        #
+        # and
+        #
+        #   [REPORT_ID, CMD, SLOT, ACK, ...]
+        # ----------------------------------------------------
 
-            if (volume_up_active) {
+        if len(response) >= 3:
 
-                if (!volume_up_held) {
-                    tap_code(KC_VOLU);
-                }
-            }
+            # Normal QMK Raw HID response
+            if (
+                response[0] == CMD_SET_PASSWORD
+                and
+                response[1] == slot - 1
+                and
+                response[2] == 1
+            ):
 
-            volume_up_active = false;
-            volume_up_held = false;
+                print()
+                print(
+                    f"Password stored successfully in slot {slot}."
+                )
 
-            return false;
+                return True
 
 
-        /* =================================================
-         * Previous Layer
-         * ================================================= */
+        if len(response) >= 4:
 
-        case LAYER_PREV:
+            # Response containing Report ID
+            if (
+                response[0] == 0
+                and
+                response[1] == CMD_SET_PASSWORD
+                and
+                response[2] == slot - 1
+                and
+                response[3] == 1
+            ):
 
-            if (record->event.pressed) {
+                print()
+                print(
+                    f"Password stored successfully in slot {slot}."
+                )
 
-                uint8_t current_layer =
-                    get_highest_layer(layer_state);
+                return True
 
-                if (current_layer == 0) {
 
-                    layer_move(3);
+        print()
+        print(
+            "Invalid confirmation received."
+        )
 
-                } else {
+        print(
+            "The macropad responded, but the response "
+            "did not match the expected acknowledgement."
+        )
 
-                    layer_move(
-                        current_layer - 1
-                    );
-                }
-            }
+        return False
 
-            return false;
 
+    finally:
 
-        /* =================================================
-         * Next Layer
-         * ================================================= */
+        device.close()
 
-        case LAYER_NEXT:
 
-            if (record->event.pressed) {
+# ============================================================
+# Main
+# ============================================================
 
-                uint8_t current_layer =
-                    get_highest_layer(layer_state);
+def main():
 
-                if (current_layer >= 3) {
+    if "--list" in sys.argv:
 
-                    layer_move(0);
+        list_devices()
 
-                } else {
+        return
 
-                    layer_move(
-                        current_layer + 1
-                    );
-                }
-            }
 
-            return false;
-    }
+    print()
+    print("======================================")
+    print("       Macropad Password Manager")
+    print("======================================")
+    print()
 
-    return true;
-}
 
+    try:
 
-/* =========================================================
- * Matrix scan
- *
- * Volume:
- *
- *   Tap  = Volume
- *   Hold = Track
- * ========================================================= */
+        slot = int(
+            input(
+                "Password slot (1-7): "
+            )
+        )
 
-void matrix_scan_user(void) {
+    except ValueError:
 
-    /* =====================================================
-     * Volume Down -> Previous Track
-     * ===================================================== */
+        print("Invalid slot.")
+        return
 
-    if (
-        volume_down_active &&
-        !volume_down_held &&
-        timer_elapsed(volume_down_timer)
-            >= VOLUME_HOLD_TIME
-    ) {
 
-        volume_down_held = true;
+    if slot < 1 or slot > 7:
 
-        tap_code(KC_MPRV);
-    }
+        print("Slot must be between 1 and 7.")
+        return
 
 
-    /* =====================================================
-     * Volume Up -> Next Track
-     * ===================================================== */
+    # Use getpass so the password isn't displayed
+    # while typing.
 
-    if (
-        volume_up_active &&
-        !volume_up_held &&
-        timer_elapsed(volume_up_timer)
-            >= VOLUME_HOLD_TIME
-    ) {
+    try:
 
-        volume_up_held = true;
+        from getpass import getpass
 
-        tap_code(KC_MNXT);
-    }
-}
+        password = getpass(
+            f"Enter password for slot {slot}: "
+        )
 
+    except Exception:
 
-#ifdef OTHER_KEYMAP_C
-#    include OTHER_KEYMAP_C
-#endif
+        password = input(
+            f"Enter password for slot {slot}: "
+        )
+
+
+    if set_password(slot, password):
+
+        print()
+        print("Done.")
+
+    else:
+
+        print()
+        print("Password was NOT confirmed as stored.")
+
+
+if __name__ == "__main__":
+
+    main()

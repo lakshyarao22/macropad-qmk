@@ -1,56 +1,15 @@
 #!/usr/bin/env python3
 
-"""
-Set one of the seven password slots on the QMK macropad.
-
-Passwords are entered interactively and are NOT written to disk.
-
-Usage:
-
-    python3 set_password.py
-
-You can also list HID devices:
-
-    python3 set_password.py --list
-
-Slots:
-
-    1 = PASS1
-    2 = PASS2
-    3 = PASS3
-    4 = PASS4
-    5 = PASS5
-    6 = PASS6
-    7 = PASS7
-
-Requires:
-
-    pip install hidapi
-"""
-
 import sys
-
-try:
-    import hid
-except ImportError:
-    sys.exit(
-        "Missing dependency.\n"
-        "Install it with:\n\n"
-        "    pip install hidapi"
-    )
+import hid
 
 
-# =========================================================
-# Keyboard USB identification
-# =========================================================
+# ============================================================
+# Macropad USB / Raw HID configuration
+# ============================================================
 
 VENDOR_ID = 0xFEED
 PRODUCT_ID = 0x0000
-
-
-# =========================================================
-# QMK Raw HID
-# =========================================================
 
 USAGE_PAGE = 0xFF60
 USAGE = 0x61
@@ -59,33 +18,12 @@ REPORT_LENGTH = 32
 
 CMD_SET_PASSWORD = 0x01
 
-PASS_SLOT_COUNT = 7
-
-# 32 byte HID report:
-#
-# byte 0 = report ID
-# byte 1 = command
-# byte 2 = slot
-# byte 3 = password length
-#
-# Therefore:
-#
-# 32 - 4 = 28 bytes would seem available if using
-# a report-ID byte separately.
-#
-# However hidapi/QMK handling varies by platform.
-# We use 29 characters because QMK's receive buffer
-# itself has 32 bytes and the command packet needs
-# three bytes inside it.
-#
-# The firmware safely truncates anything longer.
-#
-MAX_PASSWORD_LENGTH = 29
+MAX_PASSWORD_LENGTH = 31
 
 
-# =========================================================
+# ============================================================
 # List HID devices
-# =========================================================
+# ============================================================
 
 def list_devices():
 
@@ -97,33 +35,20 @@ def list_devices():
 
     for d in devices:
 
-        usage_page = d.get("usage_page")
-        usage = d.get("usage")
-
-        if usage_page is None:
-            usage_page_text = "N/A"
-        else:
-            usage_page_text = f"{usage_page:#06x}"
-
-        if usage is None:
-            usage_text = "N/A"
-        else:
-            usage_text = f"{usage:#04x}"
-
         print(
             f"VID={d['vendor_id']:#06x} "
             f"PID={d['product_id']:#06x} "
-            f"usage_page={usage_page_text} "
-            f"usage={usage_text} "
+            f"usage_page={d.get('usage_page', 0):#06x} "
+            f"usage={d.get('usage', 0):#04x} "
             f"product={d.get('product_string')}"
         )
 
 
-# =========================================================
+# ============================================================
 # Find QMK Raw HID interface
-# =========================================================
+# ============================================================
 
-def find_raw_hid_path():
+def find_raw_hid():
 
     devices = hid.enumerate(
         VENDOR_ID,
@@ -138,230 +63,223 @@ def find_raw_hid_path():
             d.get("usage") == USAGE
         ):
 
-            return d["path"]
+            return d
 
-    raise RuntimeError(
-        "\nRaw HID interface not found.\n\n"
-        "Expected:\n"
-        f"  VID        = {VENDOR_ID:#06x}\n"
-        f"  PID        = {PRODUCT_ID:#06x}\n"
-        f"  usage_page = {USAGE_PAGE:#06x}\n"
-        f"  usage      = {USAGE:#04x}\n\n"
-        "Make sure:\n"
-        "  1. The macropad is connected.\n"
-        "  2. RAW is enabled in keyboard.json.\n"
-        "  3. The new firmware has been flashed.\n"
-    )
+    return None
 
 
-# =========================================================
-# Select password slot
-# =========================================================
+# ============================================================
+# Send password
+# ============================================================
 
-def get_slot():
+def set_password(slot, password):
 
-    while True:
+    if slot < 1 or slot > 7:
 
-        try:
-            slot = int(
-                input(
-                    "Password slot (1-7): "
-                )
-            )
-
-        except ValueError:
-            print("Please enter a number from 1 to 7.")
-            continue
-
-        if 1 <= slot <= PASS_SLOT_COUNT:
-            return slot - 1
-
-        print("Please enter a number from 1 to 7.")
-
-
-# =========================================================
-# Main
-# =========================================================
-
-def main():
-
-    if "--list" in sys.argv:
-
-        list_devices()
-        return
-
-
-    print()
-    print("==============================")
-    print(" QMK Macropad Password Setup")
-    print("==============================")
-    print()
-
-
-    slot = get_slot()
-
-
-    print()
-    print(
-        f"Setting password slot {slot + 1}"
-    )
-    print()
-
-
-    password = input(
-        "Enter password: "
-    )
+        print("Slot must be between 1 and 7.")
+        return False
 
 
     if not password:
 
-        sys.exit(
-            "Empty password. Nothing was sent."
+        print("Password cannot be empty.")
+        return False
+
+
+    encoded = password.encode("ascii")
+
+
+    if len(encoded) > MAX_PASSWORD_LENGTH:
+
+        print(
+            f"Password too long. "
+            f"Maximum is {MAX_PASSWORD_LENGTH} ASCII characters."
         )
 
+        return False
 
-    if len(password) > MAX_PASSWORD_LENGTH:
 
-        sys.exit(
-            f"Password is too long.\n"
-            f"Maximum length: {MAX_PASSWORD_LENGTH} characters."
+    interface = find_raw_hid()
+
+
+    if interface is None:
+
+        print()
+        print("Raw HID interface not found.")
+        print()
+        print(
+            "Expected:"
+        )
+        print(
+            f"VID=0x{VENDOR_ID:04X} "
+            f"PID=0x{PRODUCT_ID:04X} "
+            f"usage_page=0x{USAGE_PAGE:04X} "
+            f"usage=0x{USAGE:02X}"
         )
 
-
-    # =====================================================
-    # ASCII check
-    #
-    # QMK send_string() expects the password to be
-    # represented using the keyboard's keycode system.
-    # =====================================================
-
-    try:
-
-        password_bytes = password.encode("ascii")
-
-    except UnicodeEncodeError:
-
-        sys.exit(
-            "Password contains non-ASCII characters.\n"
-            "Please use ASCII characters only."
-        )
+        return False
 
 
-    # =====================================================
-    # Find Raw HID interface
-    # =====================================================
+    print()
+    print(
+        f"Using Raw HID interface: "
+        f"VID=0x{interface['vendor_id']:04X} "
+        f"PID=0x{interface['product_id']:04X}"
+    )
 
-    try:
+    print(
+        f"Usage Page: 0x{interface['usage_page']:04X}"
+    )
 
-        path = find_raw_hid_path()
+    print(
+        f"Usage: 0x{interface['usage']:02X}"
+    )
 
-    except RuntimeError as error:
-
-        sys.exit(str(error))
-
-
-    # =====================================================
-    # Open keyboard
-    # =====================================================
 
     device = hid.device()
 
+
     try:
 
-        device.open_path(path)
+        device.open_path(interface["path"])
 
-        # =================================================
-        # Packet:
+
+        # ====================================================
+        # QMK Raw HID packet
         #
-        # [command]
-        # [slot]
-        # [length]
-        # [password bytes]
-        # =================================================
+        # byte 0 = command
+        # byte 1 = slot
+        # byte 2 = password length
+        # byte 3+ = password
+        #
+        # HID report itself has a leading Report ID byte = 0
+        #
+        # Total report sent to hidapi:
+        #   1 byte report ID
+        #   32 bytes Raw HID payload
+        # ====================================================
 
         payload = (
             bytes([
                 CMD_SET_PASSWORD,
-                slot,
-                len(password_bytes)
+                slot - 1,
+                len(encoded)
             ])
-            +
-            password_bytes
+            + encoded
         )
 
 
-        # HID report:
-        #
-        # First byte = report ID 0
-        #
-        report = (
-            bytes([0])
-            +
-            payload
-            +
-            bytes(
-                max(
-                    0,
-                    REPORT_LENGTH - len(payload)
-                )
-            )
+        payload += bytes(
+            REPORT_LENGTH - len(payload)
         )
 
 
-        # Make absolutely sure the report is the expected
-        # size.
-
-        report = report[:REPORT_LENGTH]
+        report = bytes([0]) + payload
 
 
         print()
         print(
-            f"Sending password to slot {slot + 1}..."
+            f"Sending password to slot {slot}..."
         )
 
 
         device.write(report)
 
 
-        # =================================================
-        # Wait for acknowledgement
-        # =================================================
+        # ====================================================
+        # Wait for QMK acknowledgement
+        # ====================================================
 
         response = device.read(
             REPORT_LENGTH,
-            timeout_ms=1000
+            timeout_ms=1500
         )
 
 
-        if (
-            response
-            and
-            len(response) >= 3
-            and
-            response[0] == CMD_SET_PASSWORD
-            and
-            response[1] == slot
-            and
-            response[2] == 1
-        ):
+        print(
+            f"Raw response: {response}"
+        )
+
+
+        if not response:
 
             print()
             print(
-                f"Password slot {slot + 1} "
-                "stored successfully."
-            )
-
-        else:
-
-            print()
-            print(
-                "No valid confirmation received."
+                "No response received from the macropad."
             )
 
             print(
-                "Check the keyboard connection "
-                "and firmware."
+                "Check that RAW_ENABLE = yes is present "
+                "in rules.mk and that the firmware was reflashed."
             )
+
+            return False
+
+
+        # ----------------------------------------------------
+        # Depending on the HID backend, the returned data may
+        # or may not include a Report ID byte.
+        #
+        # Therefore support both:
+        #
+        #   [CMD, SLOT, ACK, ...]
+        #
+        # and
+        #
+        #   [REPORT_ID, CMD, SLOT, ACK, ...]
+        # ----------------------------------------------------
+
+        if len(response) >= 3:
+
+            # Normal QMK Raw HID response
+            if (
+                response[0] == CMD_SET_PASSWORD
+                and
+                response[1] == slot - 1
+                and
+                response[2] == 1
+            ):
+
+                print()
+                print(
+                    f"Password stored successfully in slot {slot}."
+                )
+
+                return True
+
+
+        if len(response) >= 4:
+
+            # Response containing Report ID
+            if (
+                response[0] == 0
+                and
+                response[1] == CMD_SET_PASSWORD
+                and
+                response[2] == slot - 1
+                and
+                response[3] == 1
+            ):
+
+                print()
+                print(
+                    f"Password stored successfully in slot {slot}."
+                )
+
+                return True
+
+
+        print()
+        print(
+            "Invalid confirmation received."
+        )
+
+        print(
+            "The macropad responded, but the response "
+            "did not match the expected acknowledgement."
+        )
+
+        return False
 
 
     finally:
@@ -369,9 +287,74 @@ def main():
         device.close()
 
 
-# =========================================================
-# Entry point
-# =========================================================
+# ============================================================
+# Main
+# ============================================================
+
+def main():
+
+    if "--list" in sys.argv:
+
+        list_devices()
+
+        return
+
+
+    print()
+    print("======================================")
+    print("       Macropad Password Manager")
+    print("======================================")
+    print()
+
+
+    try:
+
+        slot = int(
+            input(
+                "Password slot (1-7): "
+            )
+        )
+
+    except ValueError:
+
+        print("Invalid slot.")
+        return
+
+
+    if slot < 1 or slot > 7:
+
+        print("Slot must be between 1 and 7.")
+        return
+
+
+    # Use getpass so the password isn't displayed
+    # while typing.
+
+    try:
+
+        from getpass import getpass
+
+        password = getpass(
+            f"Enter password for slot {slot}: "
+        )
+
+    except Exception:
+
+        password = input(
+            f"Enter password for slot {slot}: "
+        )
+
+
+    if set_password(slot, password):
+
+        print()
+        print("Done.")
+
+    else:
+
+        print()
+        print("Password was NOT confirmed as stored.")
+
 
 if __name__ == "__main__":
 
