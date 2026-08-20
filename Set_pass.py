@@ -25,8 +25,8 @@ except ImportError:
 # Keyboard USB IDs
 # ============================================================
 
-VENDOR_ID = 0x1234       # <-- CHANGE THIS
-PRODUCT_ID = 0x5678      # <-- CHANGE THIS
+VENDOR_ID = 0xFEED
+PRODUCT_ID = 0x0000
 
 
 # ============================================================
