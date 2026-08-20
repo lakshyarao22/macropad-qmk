@@ -80,11 +80,11 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
-    uint16_t address =
+    eeprom_address_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
     pass_len =
-        eeprom_read_byte((uint8_t *)address);
+        eeprom_read_byte(address);
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
@@ -92,12 +92,11 @@ static void pass_load_from_eeprom(uint8_t slot) {
 
     eeprom_read_block(
         pass_buf,
-        (void *)(address + 1),
+        address + 1,
         pass_len
     );
 
     pass_buf[pass_len] = '\0';
-}
 
 
 /* =========================================================
@@ -118,17 +117,17 @@ static void pass_save_to_eeprom(
         len = PASS_MAX_LEN;
     }
 
-    uint16_t address =
+    eeprom_address_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
     eeprom_update_byte(
-        (uint8_t *)address,
+        address,
         len
     );
 
     eeprom_update_block(
         new_pass,
-        (void *)(address + 1),
+        address + 1,
         len
     );
 }
