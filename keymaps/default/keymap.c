@@ -1,5 +1,6 @@
 #include QMK_KEYBOARD_H
 #include <eeprom.h>
+#include "raw_hid.h"
 
 #if __has_include("keymap.h")
 #    include "keymap.h"
@@ -123,8 +124,8 @@ void raw_hid_receive(uint8_t *data, uint8_t length) {
  * like maroon never blow out to full brightness either.
  * ========================= */
 
-#define BREATH_PERIOD_MS   10000  /* full cycle length (up+down), ms - lower = faster */
-#define BREATH_MIN_PERCENT 40    /* floor - never dims below this, all layers */
+#define BREATH_PERIOD_MS   3000  /* full cycle length (up+down), ms - lower = faster */
+#define BREATH_MIN_PERCENT 20    /* floor - never dims below this, all layers */
 
 #define BREATH_MIN_VAL ((BREATH_MIN_PERCENT * 255) / 100)
 #define PCT_TO_VAL(pct) ((pct) * 255 / 100)
