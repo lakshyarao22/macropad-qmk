@@ -1,54 +1,66 @@
 #!/usr/bin/env python3
 
 """
-Store one of seven passwords on the macropad over Raw HID.
+Macropad password provisioning tool.
 
-The password is entered at the prompt and sent directly
-to the keyboard. It is never written to disk.
+Stores one of seven password slots on the macropad.
+
+Passwords are sent over Raw HID and stored in the RP2040's
+EEPROM. The password itself is never written to disk by this script.
 
 Usage:
 
     python3 set_password.py
 
+List HID devices:
+
     python3 set_password.py --list
 """
 
+
 import sys
+
 
 try:
     import hid
 except ImportError:
-    sys.exit("Missing dependency. Install it with: pip install hidapi")
+    sys.exit(
+        "Missing dependency.\n"
+        "Install it with:\n\n"
+        "    pip install hidapi"
+    )
 
 
 # ============================================================
-# Keyboard USB IDs
+# MACROPAD USB IDENTIFICATION
 # ============================================================
 
 VENDOR_ID = 0xFEED
 PRODUCT_ID = 0x0000
-
-
-# ============================================================
-# QMK Raw HID configuration
-# ============================================================
 
 USAGE_PAGE = 0xFF60
 USAGE = 0x61
 
 REPORT_LENGTH = 32
 
-CMD_SET_PASSWORD = 0x01
+
+# ============================================================
+# PASSWORD SETTINGS
+# ============================================================
 
 PASSWORD_SLOTS = 7
-
-# [command][slot][length] = 3 bytes
-# 32-byte report leaves 29 bytes for password.
-MAX_PASSWORD_LENGTH = 29
+MAX_PASSWORD_LENGTH = 31
 
 
 # ============================================================
-# List HID devices
+# RAW HID COMMANDS
+# ============================================================
+
+CMD_SET_PASSWORD = 0x01
+
+
+# ============================================================
+# LIST HID DEVICES
 # ============================================================
 
 def list_devices():
@@ -61,75 +73,90 @@ def list_devices():
 
     for d in devices:
 
+        usage_page = d.get("usage_page", 0)
+        usage = d.get("usage", 0)
+
         print(
             f"VID={d['vendor_id']:#06x} "
             f"PID={d['product_id']:#06x} "
-            f"usage_page={d.get('usage_page', 0):#06x} "
-            f"usage={d.get('usage', 0):#04x} "
+            f"usage_page={usage_page:#06x} "
+            f"usage={usage:#04x} "
             f"product={d.get('product_string')}"
         )
 
 
 # ============================================================
-# Find QMK Raw HID interface
+# FIND RAW HID INTERFACE
 # ============================================================
 
 def find_raw_hid_path():
 
-    for d in hid.enumerate(VENDOR_ID, PRODUCT_ID):
+    devices = hid.enumerate(
+        VENDOR_ID,
+        PRODUCT_ID
+    )
+
+    for d in devices:
+
+        usage_page = d.get("usage_page")
+        usage = d.get("usage")
 
         if (
-            d.get("usage_page") == USAGE_PAGE
-            and d.get("usage") == USAGE
+            usage_page == USAGE_PAGE
+            and usage == USAGE
         ):
-
             return d["path"]
 
     raise RuntimeError(
-        "Raw HID interface not found.\n\n"
-        "Check VENDOR_ID/PRODUCT_ID in this script,\n"
-        "make sure RAW_ENABLE = yes is in rules.mk,\n"
-        "and make sure the firmware was reflashed."
+        "\nRaw HID interface not found.\n\n"
+        "Expected:\n"
+        f"VID        = {VENDOR_ID:#06x}\n"
+        f"PID        = {PRODUCT_ID:#06x}\n"
+        f"Usage Page = {USAGE_PAGE:#06x}\n"
+        f"Usage      = {USAGE:#04x}\n\n"
+        "Make sure:\n"
+        "1. RAW_ENABLE = yes is enabled.\n"
+        "2. The firmware was reflashed after enabling Raw HID.\n"
+        "3. The macropad is connected normally."
     )
 
 
 # ============================================================
-# Ask for password slot
+# GET PASSWORD SLOT
 # ============================================================
 
 def get_slot():
 
     while True:
 
+        value = input(
+            "Password slot (1-7): "
+        ).strip()
+
         try:
-            slot = int(
-                input(
-                    "Enter password slot (1-7): "
-                )
-            )
+            slot = int(value)
 
         except ValueError:
 
-            print("Please enter a number from 1 to 7.")
-            continue
+            print(
+                "Please enter a number from 1 to 7."
+            )
 
+            continue
 
         if 1 <= slot <= PASSWORD_SLOTS:
             return slot - 1
 
-
-        print("Invalid slot. Choose 1-7.")
+        print(
+            "Please enter a number from 1 to 7."
+        )
 
 
 # ============================================================
-# Main
+# MAIN
 # ============================================================
 
 def main():
-
-    # --------------------------------------------------------
-    # Device listing
-    # --------------------------------------------------------
 
     if "--list" in sys.argv:
 
@@ -137,16 +164,17 @@ def main():
         return
 
 
-    # --------------------------------------------------------
-    # Select slot
-    # --------------------------------------------------------
+    print()
+    print("===================================")
+    print("       MACROPAD PASSWORD SETTER")
+    print("===================================")
+    print()
+
 
     slot = get_slot()
 
 
-    # --------------------------------------------------------
-    # Enter password
-    # --------------------------------------------------------
+    print()
 
     password = input(
         f"Enter password for slot {slot + 1}: "
@@ -156,25 +184,18 @@ def main():
     if not password:
 
         sys.exit(
-            "Empty password, nothing sent."
+            "Empty password. Nothing was sent."
         )
 
-
-    # --------------------------------------------------------
-    # Check length
-    # --------------------------------------------------------
 
     if len(password) > MAX_PASSWORD_LENGTH:
 
         sys.exit(
-            f"Password too long. "
-            f"Maximum is {MAX_PASSWORD_LENGTH} characters."
+            f"Password too long.\n"
+            f"Maximum length is "
+            f"{MAX_PASSWORD_LENGTH} characters."
         )
 
-
-    # --------------------------------------------------------
-    # ASCII check
-    # --------------------------------------------------------
 
     try:
 
@@ -183,43 +204,53 @@ def main():
     except UnicodeEncodeError:
 
         sys.exit(
-            "Password contains non-ASCII characters. "
-            "The current firmware uses send_string(), "
-            "so use ASCII characters only."
+            "Password contains non-ASCII characters.\n"
+            "For now, please use ASCII characters only."
         )
 
 
-    # --------------------------------------------------------
-    # Find Raw HID interface
-    # --------------------------------------------------------
+    if len(password_bytes) > MAX_PASSWORD_LENGTH:
+
+        sys.exit(
+            f"Password is too long.\n"
+            f"Maximum length is "
+            f"{MAX_PASSWORD_LENGTH} bytes."
+        )
+
+
+    print()
+    print("Looking for macropad...")
+
 
     try:
 
         path = find_raw_hid_path()
 
-    except RuntimeError as e:
+    except RuntimeError as error:
 
-        sys.exit(str(e))
+        sys.exit(str(error))
 
-
-    # --------------------------------------------------------
-    # Open device
-    # --------------------------------------------------------
 
     device = hid.device()
+
 
     try:
 
         device.open_path(path)
 
+        print("Macropad found.")
+        print(
+            f"Writing password to slot {slot + 1}..."
+        )
+
 
         # ----------------------------------------------------
-        # Build Raw HID packet
+        # Packet:
         #
-        # Byte 0 = command
-        # Byte 1 = slot
-        # Byte 2 = password length
-        # Byte 3+ = password
+        # byte 0 = command
+        # byte 1 = slot
+        # byte 2 = password length
+        # byte 3+ = password
         # ----------------------------------------------------
 
         payload = (
@@ -232,28 +263,33 @@ def main():
         )
 
 
+        if len(payload) > REPORT_LENGTH:
+
+            sys.exit(
+                "Internal error: HID packet is too large."
+            )
+
+
         # ----------------------------------------------------
-        # Pad to 32 bytes.
+        # QMK Raw HID expects a report ID byte first.
         #
-        # First byte is report ID = 0.
+        # Report ID = 0
         # ----------------------------------------------------
 
         report = (
             bytes([0])
             + payload
-            + bytes(REPORT_LENGTH - len(payload))
+            + bytes(
+                REPORT_LENGTH - len(payload)
+            )
         )
 
-
-        # ----------------------------------------------------
-        # Send
-        # ----------------------------------------------------
 
         device.write(report)
 
 
         # ----------------------------------------------------
-        # Wait for acknowledgement
+        # Wait for acknowledgement.
         # ----------------------------------------------------
 
         response = device.read(
@@ -261,16 +297,6 @@ def main():
             timeout_ms=1000
         )
 
-
-        # ----------------------------------------------------
-        # Check acknowledgement
-        #
-        # Firmware sends:
-        #
-        # response[0] = CMD_SET_PASSWORD
-        # response[1] = slot
-        # response[2] = 1
-        # ----------------------------------------------------
 
         if (
             response
@@ -280,21 +306,22 @@ def main():
             and response[2] == 1
         ):
 
+            print()
             print(
-                f"Password successfully stored "
-                f"in slot {slot + 1}."
+                f"SUCCESS: Password stored in slot "
+                f"{slot + 1}."
             )
 
         else:
 
+            print()
             print(
-                "No confirmation received from the macropad."
+                "WARNING: No valid confirmation received."
             )
 
             print(
-                "Check the connection and firmware."
+                "The password may not have been stored."
             )
-
 
     finally:
 
@@ -302,7 +329,7 @@ def main():
 
 
 # ============================================================
-# Entry point
+# ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":

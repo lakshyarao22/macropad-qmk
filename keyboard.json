@@ -12,7 +12,8 @@
         "mousekey": true,
         "nkro": true,
         "extrakey": true,
-        "rgblight": true
+        "rgblight": true,
+        "raw": true
     },
 
     "matrix_pins": {
@@ -23,7 +24,6 @@
         ]
     },
 
-    "diode_direction": "COL2ROW",
     "debounce": 5,
 
     "ws2812": {

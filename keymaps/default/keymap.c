@@ -9,7 +9,7 @@
 
 
 /* =========================================================
- * Custom keycodes
+ * CUSTOM KEYCODES
  * ========================================================= */
 
 enum custom_keycodes {
@@ -30,36 +30,30 @@ enum custom_keycodes {
 
 
 /* =========================================================
- * Password storage
+ * PASSWORD STORAGE
  *
- * Seven independent password slots.
+ * 7 password slots.
  *
  * Each slot:
  *
  *   byte 0      = password length
- *   bytes 1-29  = password
+ *   bytes 1-31  = password
  *
  * Slot size = 32 bytes.
  *
- * EEPROM:
+ * Slot 1 = address 100
+ * Slot 2 = address 132
+ * Slot 3 = address 164
+ * Slot 4 = address 196
+ * Slot 5 = address 228
+ * Slot 6 = address 260
+ * Slot 7 = address 292
  *
- *   Slot 1 -> 100 - 131
- *   Slot 2 -> 132 - 163
- *   Slot 3 -> 164 - 195
- *   Slot 4 -> 196 - 227
- *   Slot 5 -> 228 - 259
- *   Slot 6 -> 260 - 291
- *   Slot 7 -> 292 - 323
- *
- * Passwords are NOT stored in the firmware source.
- * They are written later through Raw HID.
- *
- * NOTE:
  * EEPROM is NOT encrypted.
  * ========================================================= */
 
 #define PASS_SLOT_COUNT 7
-#define PASS_MAX_LEN    29
+#define PASS_MAX_LEN    31
 
 #define PASS_EEPROM_BASE 100
 #define PASS_SLOT_SIZE   32
@@ -70,7 +64,7 @@ static uint8_t pass_len = 0;
 
 
 /* =========================================================
- * Load password from EEPROM
+ * LOAD PASSWORD FROM EEPROM
  * ========================================================= */
 
 static void pass_load_from_eeprom(uint8_t slot) {
@@ -81,40 +75,33 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
+    /*
+     * QMK's EEPROM API expects a pointer.
+     *
+     * Do NOT use eeprom_address_t here.
+     */
+
     uint16_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
-    /*
-     * QMK's EEPROM API expects pointers.
-     *
-     * The address is stored as an integer offset, so convert
-     * through uintptr_t first. This avoids the ARM compiler's
-     * int-to-pointer-cast warning.
-     */
-
-    uint8_t *eeprom_address =
-        (uint8_t *)(uintptr_t)address;
-
-    pass_len =
-        eeprom_read_byte(eeprom_address);
+    pass_len = eeprom_read_byte(
+        (uint8_t *)address
+    );
 
     /*
-     * Protect against uninitialized/corrupt EEPROM.
+     * EEPROM is normally 0xFF when unused.
+     * Reject anything larger than our maximum.
      */
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
-    /*
-     * Only read the password if one exists.
-     */
-
     if (pass_len > 0) {
 
         eeprom_read_block(
             pass_buf,
-            eeprom_address + 1,
+            (const void *)(address + 1),
             pass_len
         );
     }
@@ -124,7 +111,7 @@ static void pass_load_from_eeprom(uint8_t slot) {
 
 
 /* =========================================================
- * Save password to EEPROM
+ * SAVE PASSWORD TO EEPROM
  * ========================================================= */
 
 static void pass_save_to_eeprom(
@@ -144,58 +131,52 @@ static void pass_save_to_eeprom(
     uint16_t address =
         PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
 
-    uint8_t *eeprom_address =
-        (uint8_t *)(uintptr_t)address;
-
     /*
      * Store password length.
      */
 
     eeprom_update_byte(
-        eeprom_address,
+        (uint8_t *)address,
         len
     );
 
     /*
-     * Clear unused bytes from the previous password.
-     *
-     * This prevents old password data from remaining in the
-     * unused portion of the EEPROM slot.
-     */
-
-    uint8_t blank = 0;
-
-    for (uint8_t i = len; i < PASS_MAX_LEN; i++) {
-
-        eeprom_update_byte(
-            eeprom_address + 1 + i,
-            blank
-        );
-    }
-
-    /*
-     * Store the new password.
+     * Store password bytes.
      */
 
     if (len > 0) {
 
         eeprom_update_block(
             new_pass,
-            eeprom_address + 1,
+            (void *)(address + 1),
             len
         );
     }
 
     /*
-     * Refresh RAM copy.
+     * Clear the unused portion of the slot.
+     *
+     * This prevents old characters from remaining in EEPROM
+     * if a new password is shorter than the old one.
      */
 
-    pass_load_from_eeprom(slot);
+    if (len < PASS_MAX_LEN) {
+
+        uint8_t zero = 0;
+
+        for (uint8_t i = len; i < PASS_MAX_LEN; i++) {
+
+            eeprom_update_byte(
+                (uint8_t *)(address + 1 + i),
+                zero
+            );
+        }
+    }
 }
 
 
 /* =========================================================
- * Send password from EEPROM slot
+ * SEND PASSWORD
  * ========================================================= */
 
 static void pass_send_slot(uint8_t slot) {
@@ -206,36 +187,37 @@ static void pass_send_slot(uint8_t slot) {
 
     pass_load_from_eeprom(slot);
 
-    if (pass_len > 0) {
-
-        send_string(pass_buf);
-
-        tap_code(KC_ENT);
+    if (pass_len == 0) {
+        return;
     }
+
+    send_string(pass_buf);
+
+    tap_code(KC_ENT);
 }
 
 
 /* =========================================================
- * Raw HID password provisioning
+ * RAW HID PASSWORD PROVISIONING
  *
- * Packet received from Python:
+ * Packet from Python:
  *
- *   data[0] = command
- *   data[1] = slot
- *   data[2] = password length
- *   data[3...] = password
+ *   byte 0 = command
+ *   byte 1 = slot
+ *   byte 2 = password length
+ *   byte 3+ = password
  *
  * Response:
  *
- *   response[0] = command
- *   response[1] = slot
- *   response[2] = 1 (success)
+ *   byte 0 = command
+ *   byte 1 = slot
+ *   byte 2 = 1
  * ========================================================= */
 
 #ifdef RAW_ENABLE
 
 enum raw_hid_commands {
-    CMD_SET_PASSWORD = 0x01,
+    CMD_SET_PASSWORD = 0x01
 };
 
 
@@ -248,44 +230,29 @@ void raw_hid_receive(
         return;
     }
 
-    uint8_t cmd =
-        data[0];
-
-    uint8_t slot =
-        data[1];
-
-    uint8_t payload_len =
-        data[2];
-
+    uint8_t cmd = data[0];
+    uint8_t slot = data[1];
+    uint8_t payload_len = data[2];
 
     if (cmd != CMD_SET_PASSWORD) {
         return;
     }
 
-
     if (slot >= PASS_SLOT_COUNT) {
         return;
     }
-
-
-    /*
-     * Never allow more than our EEPROM slot can hold.
-     */
 
     if (payload_len > PASS_MAX_LEN) {
         payload_len = PASS_MAX_LEN;
     }
 
-
     /*
-     * Make sure we don't read beyond the received
-     * HID packet.
+     * Protect against malformed packets.
      */
 
     if (payload_len > (length - 3)) {
         payload_len = length - 3;
     }
-
 
     pass_save_to_eeprom(
         slot,
@@ -293,9 +260,8 @@ void raw_hid_receive(
         payload_len
     );
 
-
     /*
-     * Send acknowledgement.
+     * Confirmation response.
      */
 
     uint8_t response[32] = {0};
@@ -303,7 +269,6 @@ void raw_hid_receive(
     response[0] = CMD_SET_PASSWORD;
     response[1] = slot;
     response[2] = 1;
-
 
     raw_hid_send(
         response,
@@ -315,20 +280,36 @@ void raw_hid_receive(
 
 
 /* =========================================================
- * Layer colors
+ * LAYER RGB COLORS
  * ========================================================= */
+
+/*
+ * Layer 0 = deep red / maroon
+ */
 
 #define LAYER0_HUE     0
 #define LAYER0_SAT     220
 #define LAYER0_MAXPCT  65
 
+/*
+ * Layer 1 = purple
+ */
+
 #define LAYER1_HUE     191
 #define LAYER1_SAT     200
 #define LAYER1_MAXPCT  100
 
+/*
+ * Layer 2 = emerald green
+ */
+
 #define LAYER2_HUE     100
 #define LAYER2_SAT     210
 #define LAYER2_MAXPCT  100
+
+/*
+ * Layer 3 = cyan
+ */
 
 #define LAYER3_HUE     128
 #define LAYER3_SAT     255
@@ -336,7 +317,7 @@ void raw_hid_receive(
 
 
 /* =========================================================
- * Breathing RGB effect
+ * BREATHING SETTINGS
  * ========================================================= */
 
 #define BREATH_PERIOD_MS    10000
@@ -360,51 +341,61 @@ static uint8_t current_max_val =
 
 
 /* =========================================================
- * Volume / track hold handling
+ * VOLUME / TRACK HOLD
  * ========================================================= */
 
 #define VOLUME_HOLD_TIME 400
 
 static uint16_t volume_down_timer = 0;
-static uint16_t volume_up_timer   = 0;
+static uint16_t volume_up_timer = 0;
 
 static bool volume_down_active = false;
-static bool volume_up_active   = false;
+static bool volume_up_active = false;
 
 static bool volume_down_held = false;
-static bool volume_up_held   = false;
+static bool volume_up_held = false;
 
 
 /* =========================================================
- * RGB housekeeping
+ * RGB HOUSEKEEPING
+ *
+ * The layer color is continuously maintained.
+ *
+ * This intentionally does NOT use RGB breathing mode.
+ * We generate the breathing effect ourselves.
  * ========================================================= */
 
 void housekeeping_task_user(void) {
 
     static uint32_t last_update = 0;
 
+    /*
+     * Update approximately every 30 ms.
+     */
 
-    if (timer_elapsed32(last_update) < 20) {
+    if (timer_elapsed32(last_update) < 30) {
         return;
     }
 
-
     last_update = timer_read32();
-
 
     uint16_t half =
         BREATH_PERIOD_MS / 2;
 
-
     uint16_t phase =
         timer_read32() % BREATH_PERIOD_MS;
 
+    uint16_t position;
 
-    uint16_t position =
-        (phase < half)
-            ? phase
-            : (BREATH_PERIOD_MS - phase);
+    if (phase < half) {
 
+        position = phase;
+
+    } else {
+
+        position =
+            BREATH_PERIOD_MS - phase;
+    }
 
     uint8_t val =
         BREATH_MIN_VAL +
@@ -415,6 +406,9 @@ void housekeeping_task_user(void) {
             ) * position / half
         );
 
+    /*
+     * Keep the layer indicator alive.
+     */
 
     rgblight_sethsv_noeeprom(
         current_hue,
@@ -425,31 +419,31 @@ void housekeeping_task_user(void) {
 
 
 /* =========================================================
- * Keyboard initialization
+ * KEYBOARD INITIALIZATION
  * ========================================================= */
 
 void keyboard_post_init_user(void) {
 
     /*
-     * Load slot 0 initially.
-     * Individual slots are loaded when their
-     * corresponding key is pressed.
+     * Load first password slot.
      */
 
     pass_load_from_eeprom(0);
 
-
     /*
-     * Start RGB lighting.
+     * Enable RGB.
      */
 
     rgblight_enable_noeeprom();
 
+    /*
+     * Static mode.
+     * Brightness is controlled manually above.
+     */
 
     rgblight_mode_noeeprom(
         RGBLIGHT_MODE_STATIC_LIGHT
     );
-
 
     rgblight_sethsv_noeeprom(
         current_hue,
@@ -460,7 +454,7 @@ void keyboard_post_init_user(void) {
 
 
 /* =========================================================
- * Layer RGB
+ * LAYER RGB
  * ========================================================= */
 
 layer_state_t layer_state_set_user(
@@ -525,23 +519,23 @@ layer_state_t layer_state_set_user(
             break;
     }
 
-
     return state;
 }
 
 
 /* =========================================================
- * Keymaps
+ * KEYMAPS
  * ========================================================= */
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
-
-    /* =====================================================
-     * Layer 0
+    /*
+     * =====================================================
+     * LAYER 0
      *
      * F13 - F21
-     * ===================================================== */
+     * =====================================================
+     */
 
     [0] = LAYOUT(
 
@@ -559,19 +553,23 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /* =====================================================
-     * Layer 1
+    /*
+     * =====================================================
+     * LAYER 1
      *
-     * Volume / Media / Brightness
+     * Top:
      *
-     * VOL DOWN:
-     *   tap  = Volume Down
-     *   hold = Previous Track
+     * VOL DOWN | MUTE | VOL UP
      *
-     * VOL UP:
-     *   tap  = Volume Up
-     *   hold = Next Track
-     * ===================================================== */
+     * Middle:
+     *
+     * BRIGHT DN | PLAY/PAUSE | BRIGHT UP
+     *
+     * Bottom:
+     *
+     * PREV LAYER | unused | NEXT LAYER
+     * =====================================================
+     */
 
     [1] = LAYOUT(
 
@@ -589,11 +587,17 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /* =====================================================
-     * Layer 2
+    /*
+     * =====================================================
+     * LAYER 2
      *
-     * Seven password slots
-     * ===================================================== */
+     * Seven password slots.
+     *
+     * PASS1 | PASS2 | PASS3
+     * PASS4 | PASS5 | PASS6
+     * PREV  | PASS7 | NEXT
+     * =====================================================
+     */
 
     [2] = LAYOUT(
 
@@ -611,11 +615,17 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /* =====================================================
-     * Layer 3
+    /*
+     * =====================================================
+     * LAYER 3
      *
-     * RGB controls
-     * ===================================================== */
+     * RGB controls.
+     *
+     * NOTE:
+     * UG_TOGG is intercepted below so that the layer
+     * indicator cannot be permanently disabled by it.
+     * =====================================================
+     */
 
     [3] = LAYOUT(
 
@@ -635,7 +645,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
 /* =========================================================
- * Process keycodes
+ * PROCESS KEYCODES
  * ========================================================= */
 
 bool process_record_user(
@@ -646,7 +656,7 @@ bool process_record_user(
     switch (keycode) {
 
         /* =================================================
-         * Password 1
+         * PASSWORD 1
          * ================================================= */
 
         case PASS1:
@@ -659,7 +669,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 2
+         * PASSWORD 2
          * ================================================= */
 
         case PASS2:
@@ -672,7 +682,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 3
+         * PASSWORD 3
          * ================================================= */
 
         case PASS3:
@@ -685,7 +695,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 4
+         * PASSWORD 4
          * ================================================= */
 
         case PASS4:
@@ -698,7 +708,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 5
+         * PASSWORD 5
          * ================================================= */
 
         case PASS5:
@@ -711,7 +721,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 6
+         * PASSWORD 6
          * ================================================= */
 
         case PASS6:
@@ -724,7 +734,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 7
+         * PASSWORD 7
          * ================================================= */
 
         case PASS7:
@@ -737,8 +747,12 @@ bool process_record_user(
 
 
         /* =================================================
-         * Volume Down / Previous Track
-         * ================================================= */
+         * VOLUME DOWN / PREVIOUS TRACK
+         *
+         * Tap  = Volume Down
+         * Hold = Previous Track
+         * =================================================
+         */
 
         case VOL_DOWN_TRACK:
 
@@ -753,19 +767,13 @@ bool process_record_user(
                 return false;
             }
 
-
             if (volume_down_active) {
 
-                /*
-                 * Short press:
-                 * Volume Down
-                 */
-
                 if (!volume_down_held) {
+
                     tap_code(KC_VOLD);
                 }
             }
-
 
             volume_down_active = false;
             volume_down_held = false;
@@ -774,8 +782,12 @@ bool process_record_user(
 
 
         /* =================================================
-         * Volume Up / Next Track
-         * ================================================= */
+         * VOLUME UP / NEXT TRACK
+         *
+         * Tap  = Volume Up
+         * Hold = Next Track
+         * =================================================
+         */
 
         case VOL_UP_TRACK:
 
@@ -790,19 +802,13 @@ bool process_record_user(
                 return false;
             }
 
-
             if (volume_up_active) {
 
-                /*
-                 * Short press:
-                 * Volume Up
-                 */
-
                 if (!volume_up_held) {
+
                     tap_code(KC_VOLU);
                 }
             }
-
 
             volume_up_active = false;
             volume_up_held = false;
@@ -811,7 +817,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Previous Layer
+         * PREVIOUS LAYER
          * ================================================= */
 
         case LAYER_PREV:
@@ -820,7 +826,6 @@ bool process_record_user(
 
                 uint8_t current_layer =
                     get_highest_layer(layer_state);
-
 
                 if (current_layer == 0) {
 
@@ -838,7 +843,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * Next Layer
+         * NEXT LAYER
          * ================================================= */
 
         case LAYER_NEXT:
@@ -847,7 +852,6 @@ bool process_record_user(
 
                 uint8_t current_layer =
                     get_highest_layer(layer_state);
-
 
                 if (current_layer >= 3) {
 
@@ -862,30 +866,60 @@ bool process_record_user(
             }
 
             return false;
-    }
 
+
+        /* =================================================
+         * RGB TOGGLE
+         *
+         * We intentionally do not allow UG_TOGG to shut
+         * down the layer indicator because our layer color
+         * system continuously controls these same LEDs.
+         * =================================================
+         */
+
+        case UG_TOGG:
+
+            if (record->event.pressed) {
+
+                /*
+                 * Restore the current layer color.
+                 */
+
+                rgblight_enable_noeeprom();
+
+                rgblight_sethsv_noeeprom(
+                    current_hue,
+                    current_sat,
+                    current_max_val
+                );
+            }
+
+            return false;
+    }
 
     return true;
 }
 
 
 /* =========================================================
- * Matrix scan
+ * MATRIX SCAN
  *
- * Detects long presses on the volume keys.
+ * Volume keys:
  *
- * Volume Down:
- *   hold 400 ms -> Previous Track
+ * Tap:
+ *   Volume Up / Down
  *
- * Volume Up:
- *   hold 400 ms -> Next Track
+ * Hold >= 400 ms:
+ *   Next / Previous Track
  * ========================================================= */
 
 void matrix_scan_user(void) {
 
-    /* =====================================================
+    /*
+     * =====================================================
      * Volume Down -> Previous Track
-     * ===================================================== */
+     * =====================================================
+     */
 
     if (
         volume_down_active &&
@@ -900,9 +934,11 @@ void matrix_scan_user(void) {
     }
 
 
-    /* =====================================================
+    /*
+     * =====================================================
      * Volume Up -> Next Track
-     * ===================================================== */
+     * =====================================================
+     */
 
     if (
         volume_up_active &&
