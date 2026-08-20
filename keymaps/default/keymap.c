@@ -20,20 +20,20 @@ enum custom_keycodes {
     PASS4,
     PASS5,
     PASS6,
-    PASS7,
 
     VOL_DOWN_TRACK,
     VOL_UP_TRACK,
 
     LAYER_PREV,
-    LAYER_NEXT
+    LAYER_NEXT,
+    LAYER_BASE
 };
 
 
 /* =========================================================
  * Password storage
  *
- * Seven password slots.
+ * Six password slots.
  *
  * Each slot:
  *
@@ -50,12 +50,11 @@ enum custom_keycodes {
  *   Slot 4 -> 196 - 227
  *   Slot 5 -> 228 - 259
  *   Slot 6 -> 260 - 291
- *   Slot 7 -> 292 - 323
  *
  * EEPROM is NOT encrypted.
  * ========================================================= */
 
-#define PASS_SLOT_COUNT 7
+#define PASS_SLOT_COUNT 6
 #define PASS_MAX_LEN    31
 
 #define PASS_EEPROM_BASE 100
@@ -612,7 +611,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_F18,
 
         LAYER_PREV,
-        KC_F19,
+        LAYER_BASE,
         LAYER_NEXT
     ),
 
@@ -644,7 +643,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_BRIU,
 
         LAYER_PREV,
-        KC_NO,
+        LAYER_BASE,
         LAYER_NEXT
     ),
 
@@ -652,7 +651,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     /* =====================================================
      * Layer 2
      *
-     * Seven password slots
+        * Six password slots
      *
      * Color: Green
      * ===================================================== */
@@ -668,7 +667,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         PASS6,
 
         LAYER_PREV,
-        PASS7,
+        LAYER_BASE,
         LAYER_NEXT
     )
 };
@@ -764,19 +763,6 @@ bool process_record_user(
 
 
         /* =================================================
-         * Password 7
-         * ================================================= */
-
-        case PASS7:
-
-            if (record->event.pressed) {
-                pass_send_slot(6);
-            }
-
-            return false;
-
-
-        /* =================================================
          * Volume Down / Previous Track
          * ================================================= */
 
@@ -805,6 +791,19 @@ bool process_record_user(
 
             volume_down_active = false;
             volume_down_held = false;
+
+            return false;
+
+
+        /* =================================================
+         * Base layer
+         * ================================================= */
+
+        case LAYER_BASE:
+
+            if (record->event.pressed) {
+                layer_move(0);
+            }
 
             return false;
 

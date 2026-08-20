@@ -3,7 +3,7 @@
 """
 QMK Macropad Password Provisioning Tool
 
-Stores passwords in one of seven EEPROM slots.
+Stores passwords in one of six EEPROM slots.
 
 Slots:
 
@@ -13,7 +13,6 @@ Slots:
     4 = PASS4
     5 = PASS5
     6 = PASS6
-    7 = PASS7
 
 Passwords are entered interactively and are NOT written to disk.
 
@@ -61,7 +60,7 @@ REPORT_LENGTH = 32
 
 CMD_SET_PASSWORD = 0x01
 
-PASS_SLOT_COUNT = 7
+PASS_SLOT_COUNT = 6
 
 PASS_MAX_LEN = 31
 
@@ -237,13 +236,11 @@ def build_packet(slot, password_bytes):
         )
 
 
-    /*
-     * hidapi on macOS expects the report ID as the
-     * first byte of the report.
-     *
-     * QMK receives the remaining 32-byte Raw HID
-     * payload as data[].
-     */
+    # hidapi on macOS expects the report ID as the
+    # first byte of the report.
+    #
+    # QMK receives the remaining 32-byte Raw HID
+    # payload as data[].
 
     report = (
         bytes([0])

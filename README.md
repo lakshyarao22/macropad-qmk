@@ -32,27 +32,32 @@ A versatile 3x3 macro keyboard powered by the RP2040 microcontroller, featuring 
 
 ### Layer 0 (Base)
 ```
-F13  F14  F15
-F16  F17  F18
-F19  F20  F21  (tap-hold for layers)
+F13       F14       F15
+F16       F17       F18
+Prev      Base      Next
 ```
 
 ### Layer 1 (Media Control)
 ```
-Vol-  Mute  Vol+
-Prev  Play  Next
-Bri↑  Bri↓  ---
+Vol-      Mute      Vol+
+Prev      Play      Next
+Prev      Base      Next
 ```
 
-### Layer 2 (System)
+The volume keys send volume down/up when tapped and previous/next track
+when held for 400 ms. The bottom-center key always returns to layer 0;
+the bottom-right key advances to the next layer.
+
+### Layer 2 (Passwords)
 ```
- ---   ---   ---
-SS+L  Lock  Pass
- ---   ---   ---
+Pass1     Pass2     Pass3
+Pass4     Pass5     Pass6
+Prev      Base      Next
 ```
 
-### Layer 3
-Additional custom functions available
+Each password key types the password stored in one of six EEPROM slots and then
+presses Enter. Passwords are limited to 31 ASCII characters and are stored
+unencrypted in the keyboard's EEPROM.
 
 ## Building & Flashing
 
@@ -125,6 +130,20 @@ RGB LED: GPIO 13
 ## Customization
 
 Edit `keymaps/default/keymap.c` to customize your key bindings. Each layer can have different key assignments to suit your workflow.
+
+### Provisioning Passwords
+
+Use the included `Set_pass.py` script to store a password in one of the six
+slots without writing it to disk:
+
+```bash
+pip install hidapi
+python3 Set_pass.py
+```
+
+The script communicates with the keyboard through its Raw HID interface. Use
+`python3 Set_pass.py --list` to inspect available HID devices if the interface
+cannot be found.
 
 ### Adding Custom Keycodes
 The default keymap includes a `PASS` custom keycode that can be expanded for your own macros:
