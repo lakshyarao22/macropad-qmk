@@ -17,14 +17,70 @@ enum custom_keycodes {
 
 
 /* =========================
+ * Layer colors (Hue, Saturation)
+ * Softer, non-primary hues instead of harsh pure R/G/B.
+ * Brightness (V) is NOT set here - it's driven separately
+ * by the manual breathing task below, so it can be floored.
+ * ========================= */
+
+#define LAYER0_HUE 11   /* Coral     - warm, not alarm-red   */
+#define LAYER0_SAT 200
+
+#define LAYER1_HUE 191  /* Purple                             */
+#define LAYER1_SAT 200
+
+#define LAYER2_HUE 123  /* Turquoise - green-adjacent, soft  */
+#define LAYER2_SAT 200
+
+#define LAYER3_HUE 128  /* Cyan                               */
+#define LAYER3_SAT 255
+
+
+/* =========================
+ * Manual breathing effect
+ * QMK's built-in RGBLIGHT_MODE_BREATHING dims all the way to 0%
+ * at the bottom of its curve. This drives brightness ourselves
+ * with a triangle wave clamped between BREATH_MIN_PERCENT and
+ * BREATH_MAX_PERCENT so it never goes fully dark.
+ * ========================= */
+
+#define BREATH_PERIOD_MS   3000  /* full cycle length (up+down), ms - lower = faster */
+#define BREATH_MIN_PERCENT 20    /* floor - never dims below this   */
+#define BREATH_MAX_PERCENT 100
+
+#define BREATH_MIN_VAL ((BREATH_MIN_PERCENT * 255) / 100)
+#define BREATH_MAX_VAL ((BREATH_MAX_PERCENT * 255) / 100)
+
+static uint8_t current_hue = LAYER0_HUE;
+static uint8_t current_sat = LAYER0_SAT;
+
+void housekeeping_task_user(void) {
+    static uint32_t last_update = 0;
+
+    if (timer_elapsed32(last_update) < 20) {
+        return; /* ~50 updates/sec - smooth without hammering the LED driver */
+    }
+    last_update = timer_read32();
+
+    uint16_t half     = BREATH_PERIOD_MS / 2;
+    uint16_t phase    = timer_read32() % BREATH_PERIOD_MS;
+    uint16_t position  = (phase < half) ? phase : (BREATH_PERIOD_MS - phase); /* 0..half..0 */
+
+    uint8_t val = BREATH_MIN_VAL +
+                  (uint8_t)((uint32_t)(BREATH_MAX_VAL - BREATH_MIN_VAL) * position / half);
+
+    rgblight_sethsv_noeeprom(current_hue, current_sat, val);
+}
+
+
+/* =========================
  * Keyboard initialization
  * ========================= */
 
 void keyboard_post_init_user(void) {
-    /* One continuous effect: breathing. No layer segments, no blinking. */
     rgblight_enable_noeeprom();
-    rgblight_mode_noeeprom(RGBLIGHT_MODE_BREATHING);
-    rgblight_sethsv_noeeprom(HSV_RED); /* starting layer (0) color */
+    rgblight_mode_noeeprom(RGBLIGHT_MODE_STATIC_LIGHT); /* base mode - brightness driven by housekeeping_task_user */
+    rgblight_sethsv_noeeprom(current_hue, current_sat, BREATH_MAX_VAL);
 }
 
 
@@ -35,19 +91,23 @@ void keyboard_post_init_user(void) {
 layer_state_t layer_state_set_user(layer_state_t state) {
     switch (get_highest_layer(state)) {
         case 0:
-            rgblight_sethsv_noeeprom(HSV_RED);
+            current_hue = LAYER0_HUE;
+            current_sat = LAYER0_SAT;
             break;
 
         case 1:
-            rgblight_sethsv_noeeprom(HSV_BLUE);
+            current_hue = LAYER1_HUE;
+            current_sat = LAYER1_SAT;
             break;
 
         case 2:
-            rgblight_sethsv_noeeprom(HSV_GREEN);
+            current_hue = LAYER2_HUE;
+            current_sat = LAYER2_SAT;
             break;
 
         case 3:
-            rgblight_sethsv_noeeprom(HSV_CYAN);
+            current_hue = LAYER3_HUE;
+            current_sat = LAYER3_SAT;
             break;
     }
 
