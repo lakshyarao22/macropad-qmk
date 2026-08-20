@@ -2,6 +2,7 @@
 #include <eeprom.h>
 #include "raw_hid.h"
 #include <stdint.h>
+#include <string.h>
 
 #if __has_include("keymap.h")
 #    include "keymap.h"
@@ -32,7 +33,7 @@ enum custom_keycodes {
 /* =========================================================
  * Password storage
  *
- * Seven independent password slots.
+ * Seven password slots.
  *
  * Each slot:
  *
@@ -51,10 +52,6 @@ enum custom_keycodes {
  *   Slot 6 -> 260 - 291
  *   Slot 7 -> 292 - 323
  *
- * Passwords are NOT stored in firmware source.
- * They are written later through Raw HID.
- *
- * NOTE:
  * EEPROM is NOT encrypted.
  * ========================================================= */
 
@@ -70,31 +67,72 @@ static uint8_t pass_len = 0;
 
 
 /* =========================================================
+ * EEPROM address helper
+ *
+ * Current QMK EEPROM API expects a pointer.
+ *
+ * We store the logical EEPROM offset as a pointer-sized
+ * value so RP2040 builds do not produce:
+ *
+ *   cast to pointer from integer of different size
+ * ========================================================= */
+
+static uint8_t *pass_eeprom_address(uint8_t slot) {
+    return (uint8_t *)(uintptr_t)(
+        PASS_EEPROM_BASE +
+        ((uint16_t)slot * PASS_SLOT_SIZE)
+    );
+}
+
+
+/* =========================================================
  * Load password from EEPROM
  * ========================================================= */
 
 static void pass_load_from_eeprom(uint8_t slot) {
-    uint8_t pass_len;
+
+    if (slot >= PASS_SLOT_COUNT) {
+        pass_len = 0;
+        pass_buf[0] = '\0';
+        return;
+    }
 
     uint8_t *address =
-        (uint8_t *)(PASS_EEPROM_BASE +
-                    (slot * PASS_EEPROM_SLOT_SIZE));
+        pass_eeprom_address(slot);
 
-    pass_len = eeprom_read_byte(address);
 
-    if (pass_len > PASS_MAX_LENGTH) {
+    pass_len =
+        eeprom_read_byte(address);
+
+
+    /*
+     * Protect against invalid EEPROM contents.
+     */
+
+    if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
+
+    /*
+     * Load password bytes.
+     */
+
     if (pass_len > 0) {
+
         eeprom_read_block(
-            password_slots[slot],
+            pass_buf,
             address + 1,
             pass_len
         );
     }
 
-    password_slots[slot][pass_len] = '\0';
+
+    /*
+     * Always terminate the string.
+     */
+
+    pass_buf[pass_len] = '\0';
 }
 
 
@@ -102,28 +140,67 @@ static void pass_load_from_eeprom(uint8_t slot) {
  * Save password to EEPROM
  * ========================================================= */
 
-static void pass_save_to_eeprom(uint8_t slot) {
-    uint8_t pass_len =
-        strlen(password_slots[slot]);
+static void pass_save_to_eeprom(
+    uint8_t slot,
+    const char *password,
+    uint8_t length
+) {
 
-    if (pass_len > PASS_MAX_LENGTH) {
-        pass_len = PASS_MAX_LENGTH;
+    if (slot >= PASS_SLOT_COUNT) {
+        return;
     }
 
+
+    /*
+     * Never exceed our 31-character password limit.
+     */
+
+    if (length > PASS_MAX_LEN) {
+        length = PASS_MAX_LEN;
+    }
+
+
     uint8_t *address =
-        (uint8_t *)(PASS_EEPROM_BASE +
-                    (slot * PASS_EEPROM_SLOT_SIZE));
+        pass_eeprom_address(slot);
+
+
+    /*
+     * Store password length.
+     */
 
     eeprom_update_byte(
         address,
-        pass_len
+        length
     );
 
-    eeprom_update_block(
-        password_slots[slot],
-        address + 1,
-        pass_len
+
+    /*
+     * Store password itself.
+     */
+
+    if (length > 0) {
+
+        eeprom_update_block(
+            password,
+            address + 1,
+            length
+        );
+    }
+
+
+    /*
+     * Update our RAM buffer as well.
+     */
+
+    memcpy(
+        pass_buf,
+        password,
+        length
     );
+
+    pass_buf[length] = '\0';
+
+    pass_len = length;
 }
 
 
@@ -137,7 +214,9 @@ static void pass_send_slot(uint8_t slot) {
         return;
     }
 
+
     pass_load_from_eeprom(slot);
+
 
     if (pass_len > 0) {
 
@@ -163,7 +242,6 @@ static void pass_send_slot(uint8_t slot) {
  *   response[0] = command
  *   response[1] = slot
  *   response[2] = 1
- *
  * ========================================================= */
 
 #ifdef RAW_ENABLE
@@ -178,9 +256,16 @@ void raw_hid_receive(
     uint8_t length
 ) {
 
+    /*
+     * Need at least:
+     *
+     * command + slot + length
+     */
+
     if (length < 3) {
         return;
     }
+
 
     uint8_t cmd =
         data[0];
@@ -192,10 +277,18 @@ void raw_hid_receive(
         data[2];
 
 
+    /*
+     * Check command.
+     */
+
     if (cmd != CMD_SET_PASSWORD) {
         return;
     }
 
+
+    /*
+     * Check slot.
+     */
 
     if (slot >= PASS_SLOT_COUNT) {
         return;
@@ -213,14 +306,17 @@ void raw_hid_receive(
 
 
     /*
-     * Make sure we don't read past the
-     * received HID packet.
+     * Never read beyond the received HID packet.
      */
 
     if (payload_len > (length - 3)) {
         payload_len = length - 3;
     }
 
+
+    /*
+     * Save password.
+     */
 
     pass_save_to_eeprom(
         slot,
@@ -260,7 +356,9 @@ void raw_hid_receive(
  * Layer 1 = Blue
  * Layer 2 = Green
  *
- * All layers have a maximum brightness of 100%.
+ * Maximum brightness = 100%.
+ *
+ * Breathing minimum = 40%.
  */
 
 #define LAYER0_HUE     128
@@ -283,7 +381,7 @@ void raw_hid_receive(
 /*
  * Full breathing cycle:
  *
- * 40% -> 100% -> 40%
+ *   40% -> 100% -> 40%
  *
  * 10 seconds total.
  */
@@ -355,10 +453,9 @@ void housekeeping_task_user(void) {
 
 
     /*
-     * Create triangle-wave breathing.
+     * Triangle-wave breathing:
      *
-     * 0 -> maximum
-     * maximum -> 0
+     * 40% -> 100% -> 40%
      */
 
     uint16_t position =
@@ -697,16 +794,6 @@ bool process_record_user(
             }
 
 
-            /*
-             * Key released.
-             *
-             * If it wasn't held long enough:
-             * send Volume Down.
-             *
-             * If it was held:
-             * Previous Track was already sent.
-             */
-
             if (volume_down_active) {
 
                 if (!volume_down_held) {
@@ -739,16 +826,6 @@ bool process_record_user(
                 return false;
             }
 
-
-            /*
-             * Key released.
-             *
-             * If it wasn't held long enough:
-             * send Volume Up.
-             *
-             * If it was held:
-             * Next Track was already sent.
-             */
 
             if (volume_up_active) {
 
@@ -847,7 +924,7 @@ bool process_record_user(
 void matrix_scan_user(void) {
 
     /* =====================================================
-     * Volume Down → Previous Track
+     * Volume Down -> Previous Track
      * ===================================================== */
 
     if (
@@ -864,7 +941,7 @@ void matrix_scan_user(void) {
 
 
     /* =====================================================
-     * Volume Up → Next Track
+     * Volume Up -> Next Track
      * ===================================================== */
 
     if (
