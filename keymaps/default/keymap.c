@@ -351,26 +351,51 @@ void raw_hid_receive(
  * ========================================================= */
 
 /*
- * Layer 0 = Cyan
- * Layer 1 = Blue
- * Layer 2 = Green
+ * Layer 0 = Cyberpunk Cyan
+ * Layer 1 = Vaporwave Magenta
+ * Layer 2 = Amber Gold
+ * Layer 3 = Ice Blue
+ * Layer 4 = Acid Green
+ * Layer 5 = Deep Violet
+ * Layer 6 = Warm White
+ * Layer 7 = Crimson Red
  *
  * Maximum brightness = 100%.
  *
  * Breathing minimum = 40%.
  */
 
-#define LAYER0_HUE     128
-#define LAYER0_SAT     255
-#define LAYER0_MAXPCT  100
+#define LAYER0_R       0
+#define LAYER0_G       255
+#define LAYER0_B       200
 
-#define LAYER1_HUE     191
-#define LAYER1_SAT     200
-#define LAYER1_MAXPCT  100
+#define LAYER1_R       255
+#define LAYER1_G       0
+#define LAYER1_B       150
 
-#define LAYER2_HUE     100
-#define LAYER2_SAT     210
-#define LAYER2_MAXPCT  100
+#define LAYER2_R       255
+#define LAYER2_G       110
+#define LAYER2_B       0
+
+#define LAYER3_R       40
+#define LAYER3_G       180
+#define LAYER3_B       255
+
+#define LAYER4_R       50
+#define LAYER4_G       255
+#define LAYER4_B       20
+
+#define LAYER5_R       120
+#define LAYER5_G       0
+#define LAYER5_B       255
+
+#define LAYER6_R       255
+#define LAYER6_G       180
+#define LAYER6_B       100
+
+#define LAYER7_R       255
+#define LAYER7_G       0
+#define LAYER7_B       20
 
 
 /* =========================================================
@@ -395,14 +420,17 @@ void raw_hid_receive(
     ((pct) * 255 / 100)
 
 
-static uint8_t current_hue =
-    LAYER0_HUE;
+static uint8_t current_red =
+    LAYER0_R;
 
-static uint8_t current_sat =
-    LAYER0_SAT;
+static uint8_t current_green =
+    LAYER0_G;
+
+static uint8_t current_blue =
+    LAYER0_B;
 
 static uint8_t current_max_val =
-    PCT_TO_VAL(LAYER0_MAXPCT);
+    255;
 
 
 /* =========================================================
@@ -473,10 +501,10 @@ void housekeeping_task_user(void) {
         );
 
 
-    rgblight_sethsv_noeeprom(
-        current_hue,
-        current_sat,
-        val
+    rgblight_setrgb_noeeprom(
+        ((uint16_t)current_red * val) / 255,
+        ((uint16_t)current_green * val) / 255,
+        ((uint16_t)current_blue * val) / 255
     );
 }
 
@@ -508,10 +536,10 @@ void keyboard_post_init_user(void) {
     );
 
 
-    rgblight_sethsv_noeeprom(
-        current_hue,
-        current_sat,
-        current_max_val
+    rgblight_setrgb_noeeprom(
+        current_red,
+        current_green,
+        current_blue
     );
 }
 
@@ -532,14 +560,16 @@ layer_state_t layer_state_set_user(
 
         case 0:
 
-            current_hue =
-                LAYER0_HUE;
+            current_red =
+                LAYER0_R;
 
-            current_sat =
-                LAYER0_SAT;
+            current_green =
+                LAYER0_G;
 
-            current_max_val =
-                PCT_TO_VAL(LAYER0_MAXPCT);
+            current_blue =
+                LAYER0_B;
+
+            current_max_val = 255;
 
             break;
 
@@ -550,14 +580,16 @@ layer_state_t layer_state_set_user(
 
         case 1:
 
-            current_hue =
-                LAYER1_HUE;
+            current_red =
+                LAYER1_R;
 
-            current_sat =
-                LAYER1_SAT;
+            current_green =
+                LAYER1_G;
 
-            current_max_val =
-                PCT_TO_VAL(LAYER1_MAXPCT);
+            current_blue =
+                LAYER1_B;
+
+            current_max_val = 255;
 
             break;
 
@@ -568,15 +600,62 @@ layer_state_t layer_state_set_user(
 
         case 2:
 
-            current_hue =
-                LAYER2_HUE;
+            current_red =
+                LAYER2_R;
 
-            current_sat =
-                LAYER2_SAT;
+            current_green =
+                LAYER2_G;
 
-            current_max_val =
-                PCT_TO_VAL(LAYER2_MAXPCT);
+            current_blue =
+                LAYER2_B;
 
+            current_max_val = 255;
+
+            break;
+
+
+        case 3:
+
+            current_red = LAYER3_R;
+            current_green = LAYER3_G;
+            current_blue = LAYER3_B;
+            current_max_val = 255;
+            break;
+
+
+        case 4:
+
+            current_red = LAYER4_R;
+            current_green = LAYER4_G;
+            current_blue = LAYER4_B;
+            current_max_val = 255;
+            break;
+
+
+        case 5:
+
+            current_red = LAYER5_R;
+            current_green = LAYER5_G;
+            current_blue = LAYER5_B;
+            current_max_val = 255;
+            break;
+
+
+        case 6:
+
+            current_red = LAYER6_R;
+            current_green = LAYER6_G;
+            current_blue = LAYER6_B;
+            current_max_val = 255;
+            break;
+
+
+        case 7:
+
+            current_red = LAYER7_R;
+            current_green = LAYER7_G;
+            current_blue = LAYER7_B;
+            current_max_val = 255;
             break;
     }
 
@@ -595,20 +674,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     /* =====================================================
      * Layer 0
      *
-     * F13 - F19
+        * Hyper 1 - Hyper 6
      *
-     * Color: Cyan
+    * Color: Cyberpunk Cyan
      * ===================================================== */
 
     [0] = LAYOUT(
 
-        KC_F13,
-        KC_F14,
-        KC_F15,
+        HYPR(KC_1),
+        HYPR(KC_2),
+        HYPR(KC_3),
 
-        KC_F16,
-        KC_F17,
-        KC_F18,
+        HYPR(KC_4),
+        HYPR(KC_5),
+        HYPR(KC_6),
 
         LAYER_PREV,
         LAYER_BASE,
@@ -629,7 +708,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *   tap  = Volume Up
      *   hold = Next Track
      *
-     * Color: Blue
+        * Color: Vaporwave Magenta
      * ===================================================== */
 
     [1] = LAYOUT(
@@ -651,12 +730,36 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     /* =====================================================
      * Layer 2
      *
-        * Six password slots
+     * F13 - F18
      *
-     * Color: Green
+     * Color: Amber Gold
      * ===================================================== */
 
     [2] = LAYOUT(
+
+        KC_F13,
+        KC_F14,
+        KC_F15,
+
+        KC_F16,
+        KC_F17,
+        KC_F18,
+
+        LAYER_PREV,
+        LAYER_BASE,
+        LAYER_NEXT
+    ),
+
+
+    /* =====================================================
+     * Layer 3
+     *
+     * Six password slots
+     *
+     * Color: Ice Blue
+     * ===================================================== */
+
+    [3] = LAYOUT(
 
         PASS1,
         PASS2,
@@ -665,6 +768,86 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         PASS4,
         PASS5,
         PASS6,
+
+        LAYER_PREV,
+        LAYER_BASE,
+        LAYER_NEXT
+    ),
+
+
+    /* =====================================================
+     * Layer 4 - Acid Green
+     * ===================================================== */
+
+    [4] = LAYOUT(
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        LAYER_PREV,
+        LAYER_BASE,
+        LAYER_NEXT
+    ),
+
+
+    /* =====================================================
+     * Layer 5 - Deep Violet
+     * ===================================================== */
+
+    [5] = LAYOUT(
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        LAYER_PREV,
+        LAYER_BASE,
+        LAYER_NEXT
+    ),
+
+
+    /* =====================================================
+     * Layer 6 - Warm White
+     * ===================================================== */
+
+    [6] = LAYOUT(
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        LAYER_PREV,
+        LAYER_BASE,
+        LAYER_NEXT
+    ),
+
+
+    /* =====================================================
+     * Layer 7 - Crimson Red
+     * ===================================================== */
+
+    [7] = LAYOUT(
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
+
+        KC_NO,
+        KC_NO,
+        KC_NO,
 
         LAYER_PREV,
         LAYER_BASE,
@@ -844,9 +1027,11 @@ bool process_record_user(
         /* =================================================
          * Previous Layer
          *
-         * 0 -> 2
+         * 0 -> 7
          * 1 -> 0
          * 2 -> 1
+         * ...
+         * 7 -> 6
          * ================================================= */
 
         case LAYER_PREV:
@@ -859,7 +1044,7 @@ bool process_record_user(
 
                 if (current_layer == 0) {
 
-                    layer_move(2);
+                    layer_move(7);
 
                 } else {
 
@@ -877,7 +1062,9 @@ bool process_record_user(
          *
          * 0 -> 1
          * 1 -> 2
-         * 2 -> 0
+         * ...
+         * 6 -> 7
+         * 7 -> 0
          * ================================================= */
 
         case LAYER_NEXT:
@@ -888,7 +1075,7 @@ bool process_record_user(
                     get_highest_layer(layer_state);
 
 
-                if (current_layer >= 2) {
+                if (current_layer >= 7) {
 
                     layer_move(0);
 

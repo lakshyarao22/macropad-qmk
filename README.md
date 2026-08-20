@@ -30,14 +30,14 @@ A versatile 3x3 macro keyboard powered by the RP2040 microcontroller, featuring 
 
 ## Default Keymap
 
-### Layer 0 (Base)
+### Layer 0 (Cyberpunk Cyan)
 ```
-F13       F14       F15
-F16       F17       F18
+Hyper+1   Hyper+2   Hyper+3
+Hyper+4   Hyper+5   Hyper+6
 Prev      Base      Next
 ```
 
-### Layer 1 (Media Control)
+### Layer 1 (Vaporwave Magenta)
 ```
 Vol-      Mute      Vol+
 Prev      Play      Next
@@ -48,16 +48,35 @@ The volume keys send volume down/up when tapped and previous/next track
 when held for 400 ms. The bottom-center key always returns to layer 0;
 the bottom-right key advances to the next layer.
 
-### Layer 2 (Passwords)
+### Layer 2 (Amber Gold)
 ```
-Pass1     Pass2     Pass3
-Pass4     Pass5     Pass6
+F13       F14       F15
+F16       F17       F18
 Prev      Base      Next
 ```
 
 Each password key types the password stored in one of six EEPROM slots and then
 presses Enter. Passwords are limited to 31 ASCII characters and are stored
 unencrypted in the keyboard's EEPROM.
+
+### Layer 3 (Ice Blue)
+
+```
+Pass1     Pass2     Pass3
+Pass4     Pass5     Pass6
+Prev      Base      Next
+```
+
+### Layers 4-7
+
+Layers 4 through 7 are currently unassigned and all keys are `KC_NO`.
+
+| Layer | Color |
+|-------|-------|
+| 4 | Acid Green `(50, 255, 20)` |
+| 5 | Deep Violet `(120, 0, 255)` |
+| 6 | Warm White `(255, 180, 100)` |
+| 7 | Crimson Red `(255, 0, 20)` |
 
 ## Building & Flashing
 
