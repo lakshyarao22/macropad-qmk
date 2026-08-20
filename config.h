@@ -2,7 +2,5 @@
 
 #define TAPPING_TERM 200
 
-#define RGBLIGHT_LAYERS
-#define RGBLIGHT_LAYER_BLINK
-#define RGBLIGHT_LAYERS_RETAIN_VAL
-#define RGBLIGHT_LAYERS_OVERRIDE_RGB_OFF
+/* Only the breathing effect is needed now - no layer segments/blink */
+#define RGBLIGHT_EFFECT_BREATHING

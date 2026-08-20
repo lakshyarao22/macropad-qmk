@@ -17,75 +17,37 @@ enum custom_keycodes {
 
 
 /* =========================
- * RGB Lighting Layers
- * ========================= */
-
-/* Layer 0 = RED */
-const rgblight_segment_t PROGMEM layer0_rgb[] =
-    RGBLIGHT_LAYER_SEGMENTS(
-        {0, 3, HSV_RED}
-    );
-
-/* Layer 1 = BLUE */
-const rgblight_segment_t PROGMEM layer1_rgb[] =
-    RGBLIGHT_LAYER_SEGMENTS(
-        {0, 3, HSV_BLUE}
-    );
-
-/* Layer 2 = GREEN */
-const rgblight_segment_t PROGMEM layer2_rgb[] =
-    RGBLIGHT_LAYER_SEGMENTS(
-        {0, 3, HSV_GREEN}
-    );
-
-/* Layer 3 = CYAN */
-const rgblight_segment_t PROGMEM layer3_rgb[] =
-    RGBLIGHT_LAYER_SEGMENTS(
-        {0, 3, HSV_CYAN}
-    );
-
-
-/* RGB lighting layer list */
-const rgblight_segment_t* const PROGMEM my_rgb_layers[] =
-    RGBLIGHT_LAYERS_LIST(
-        layer0_rgb,
-        layer1_rgb,
-        layer2_rgb,
-        layer3_rgb
-    );
-
-
-/* =========================
  * Keyboard initialization
  * ========================= */
 
 void keyboard_post_init_user(void) {
-    rgblight_layers = my_rgb_layers;
+    /* One continuous effect: breathing. No layer segments, no blinking. */
+    rgblight_enable_noeeprom();
+    rgblight_mode_noeeprom(RGBLIGHT_MODE_BREATHING);
+    rgblight_sethsv_noeeprom(HSV_RED); /* starting layer (0) color */
 }
 
 
 /* =========================
- * Layer RGB blinking
+ * Layer RGB - breathing color changes with layer
  * ========================= */
 
 layer_state_t layer_state_set_user(layer_state_t state) {
-    uint8_t layer = get_highest_layer(state);
-
-    switch (layer) {
+    switch (get_highest_layer(state)) {
         case 0:
-            rgblight_blink_layer_repeat(0, 100, 2);
+            rgblight_sethsv_noeeprom(HSV_RED);
             break;
 
         case 1:
-            rgblight_blink_layer_repeat(1, 100, 2);
+            rgblight_sethsv_noeeprom(HSV_BLUE);
             break;
 
         case 2:
-            rgblight_blink_layer_repeat(2, 100, 2);
+            rgblight_sethsv_noeeprom(HSV_GREEN);
             break;
 
         case 3:
-            rgblight_blink_layer_repeat(3, 100, 2);
+            rgblight_sethsv_noeeprom(HSV_CYAN);
             break;
     }
 
