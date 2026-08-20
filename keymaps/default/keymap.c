@@ -9,7 +9,7 @@
 
 
 /* =========================================================
- * CUSTOM KEYCODES
+ * Custom keycodes
  * ========================================================= */
 
 enum custom_keycodes {
@@ -30,32 +30,38 @@ enum custom_keycodes {
 
 
 /* =========================================================
- * PASSWORD STORAGE
+ * Password storage
  *
- * 7 password slots.
+ * Seven password slots.
  *
  * Each slot:
  *
  *   byte 0      = password length
- *   bytes 1-31  = password
+ *   bytes 1-29  = password
  *
  * Slot size = 32 bytes.
  *
- * Slot 1 = address 100
- * Slot 2 = address 132
- * Slot 3 = address 164
- * Slot 4 = address 196
- * Slot 5 = address 228
- * Slot 6 = address 260
- * Slot 7 = address 292
+ * We start at logical EEPROM address 256 to leave the
+ * beginning of the EEPROM area available to QMK.
  *
- * EEPROM is NOT encrypted.
+ * Slot 1 -> 256 - 287
+ * Slot 2 -> 288 - 319
+ * Slot 3 -> 320 - 351
+ * Slot 4 -> 352 - 383
+ * Slot 5 -> 384 - 415
+ * Slot 6 -> 416 - 447
+ * Slot 7 -> 448 - 479
+ *
+ * Passwords are written later using Raw HID.
+ *
+ * IMPORTANT:
+ * EEPROM is not encrypted.
  * ========================================================= */
 
-#define PASS_SLOT_COUNT 7
-#define PASS_MAX_LEN    31
+#define PASS_SLOT_COUNT  7
+#define PASS_MAX_LEN     29
 
-#define PASS_EEPROM_BASE 100
+#define PASS_EEPROM_BASE 256
 #define PASS_SLOT_SIZE   32
 
 
@@ -64,7 +70,7 @@ static uint8_t pass_len = 0;
 
 
 /* =========================================================
- * LOAD PASSWORD FROM EEPROM
+ * Load password from EEPROM
  * ========================================================= */
 
 static void pass_load_from_eeprom(uint8_t slot) {
@@ -75,43 +81,33 @@ static void pass_load_from_eeprom(uint8_t slot) {
         return;
     }
 
-    /*
-     * QMK's EEPROM API expects a pointer.
-     *
-     * Do NOT use eeprom_address_t here.
-     */
-
-    uint16_t address =
-        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
+    uintptr_t address =
+        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
 
     pass_len = eeprom_read_byte(
-        (uint8_t *)address
+        (const uint8_t *)address
     );
 
     /*
-     * EEPROM is normally 0xFF when unused.
-     * Reject anything larger than our maximum.
+     * EEPROM may contain 0xFF on first use.
      */
 
     if (pass_len > PASS_MAX_LEN) {
         pass_len = 0;
     }
 
-    if (pass_len > 0) {
-
-        eeprom_read_block(
-            pass_buf,
-            (const void *)(address + 1),
-            pass_len
-        );
-    }
+    eeprom_read_block(
+        pass_buf,
+        (const void *)(address + 1),
+        pass_len
+    );
 
     pass_buf[pass_len] = '\0';
 }
 
 
 /* =========================================================
- * SAVE PASSWORD TO EEPROM
+ * Save password to EEPROM
  * ========================================================= */
 
 static void pass_save_to_eeprom(
@@ -128,55 +124,36 @@ static void pass_save_to_eeprom(
         len = PASS_MAX_LEN;
     }
 
-    uint16_t address =
-        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
-
-    /*
-     * Store password length.
-     */
+    uintptr_t address =
+        (uintptr_t)(PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE));
 
     eeprom_update_byte(
         (uint8_t *)address,
         len
     );
 
-    /*
-     * Store password bytes.
-     */
-
-    if (len > 0) {
-
-        eeprom_update_block(
-            new_pass,
-            (void *)(address + 1),
-            len
-        );
-    }
+    eeprom_update_block(
+        new_pass,
+        (void *)(address + 1),
+        len
+    );
 
     /*
-     * Clear the unused portion of the slot.
-     *
-     * This prevents old characters from remaining in EEPROM
-     * if a new password is shorter than the old one.
+     * Update the RAM copy as well.
      */
 
-    if (len < PASS_MAX_LEN) {
+    pass_len = len;
 
-        uint8_t zero = 0;
-
-        for (uint8_t i = len; i < PASS_MAX_LEN; i++) {
-
-            eeprom_update_byte(
-                (uint8_t *)(address + 1 + i),
-                zero
-            );
-        }
+    for (uint8_t i = 0; i < len; i++) {
+        pass_buf[i] = new_pass[i];
     }
+
+    pass_buf[len] = '\0';
 }
 
 
 /* =========================================================
- * SEND PASSWORD
+ * Send password from EEPROM slot
  * ========================================================= */
 
 static void pass_send_slot(uint8_t slot) {
@@ -198,20 +175,24 @@ static void pass_send_slot(uint8_t slot) {
 
 
 /* =========================================================
- * RAW HID PASSWORD PROVISIONING
+ * Raw HID
  *
- * Packet from Python:
+ * Packet:
  *
- *   byte 0 = command
- *   byte 1 = slot
- *   byte 2 = password length
- *   byte 3+ = password
+ *   data[0] = command
+ *   data[1] = slot
+ *   data[2] = password length
+ *   data[3...] = password
  *
- * Response:
+ * Example:
  *
- *   byte 0 = command
- *   byte 1 = slot
- *   byte 2 = 1
+ *   01 00 08 password
+ *
+ * means:
+ *
+ *   command = SET_PASSWORD
+ *   slot    = 0
+ *   length  = 8
  * ========================================================= */
 
 #ifdef RAW_ENABLE
@@ -242,12 +223,16 @@ void raw_hid_receive(
         return;
     }
 
+    /*
+     * Maximum password size.
+     */
+
     if (payload_len > PASS_MAX_LEN) {
         payload_len = PASS_MAX_LEN;
     }
 
     /*
-     * Protect against malformed packets.
+     * Never read beyond the received HID packet.
      */
 
     if (payload_len > (length - 3)) {
@@ -261,7 +246,11 @@ void raw_hid_receive(
     );
 
     /*
-     * Confirmation response.
+     * Send acknowledgement.
+     *
+     * response[0] = command
+     * response[1] = slot
+     * response[2] = success
      */
 
     uint8_t response[32] = {0};
@@ -280,36 +269,20 @@ void raw_hid_receive(
 
 
 /* =========================================================
- * LAYER RGB COLORS
+ * Layer colors
  * ========================================================= */
-
-/*
- * Layer 0 = deep red / maroon
- */
 
 #define LAYER0_HUE     0
 #define LAYER0_SAT     220
 #define LAYER0_MAXPCT  65
 
-/*
- * Layer 1 = purple
- */
-
 #define LAYER1_HUE     191
 #define LAYER1_SAT     200
 #define LAYER1_MAXPCT  100
 
-/*
- * Layer 2 = emerald green
- */
-
 #define LAYER2_HUE     100
 #define LAYER2_SAT     210
 #define LAYER2_MAXPCT  100
-
-/*
- * Layer 3 = cyan
- */
 
 #define LAYER3_HUE     128
 #define LAYER3_SAT     255
@@ -317,7 +290,7 @@ void raw_hid_receive(
 
 
 /* =========================================================
- * BREATHING SETTINGS
+ * Breathing RGB
  * ========================================================= */
 
 #define BREATH_PERIOD_MS    10000
@@ -341,39 +314,42 @@ static uint8_t current_max_val =
 
 
 /* =========================================================
- * VOLUME / TRACK HOLD
+ * Volume / track handling
+ *
+ * Tap:
+ *   Volume Down / Volume Up
+ *
+ * Hold:
+ *   Previous Track / Next Track
  * ========================================================= */
 
 #define VOLUME_HOLD_TIME 400
 
 static uint16_t volume_down_timer = 0;
-static uint16_t volume_up_timer = 0;
+static uint16_t volume_up_timer   = 0;
 
 static bool volume_down_active = false;
-static bool volume_up_active = false;
+static bool volume_up_active   = false;
 
 static bool volume_down_held = false;
-static bool volume_up_held = false;
+static bool volume_up_held   = false;
 
 
 /* =========================================================
- * RGB HOUSEKEEPING
+ * RGB housekeeping
  *
- * The layer color is continuously maintained.
+ * This directly controls the three WS2812 LEDs.
  *
- * This intentionally does NOT use RGB breathing mode.
- * We generate the breathing effect ourselves.
+ * We deliberately do NOT use UG_TOGG here because
+ * UG_TOGG controls the same LEDs that we use for layer
+ * indication.
  * ========================================================= */
 
 void housekeeping_task_user(void) {
 
     static uint32_t last_update = 0;
 
-    /*
-     * Update approximately every 30 ms.
-     */
-
-    if (timer_elapsed32(last_update) < 30) {
+    if (timer_elapsed32(last_update) < 20) {
         return;
     }
 
@@ -385,17 +361,10 @@ void housekeeping_task_user(void) {
     uint16_t phase =
         timer_read32() % BREATH_PERIOD_MS;
 
-    uint16_t position;
-
-    if (phase < half) {
-
-        position = phase;
-
-    } else {
-
-        position =
-            BREATH_PERIOD_MS - phase;
-    }
+    uint16_t position =
+        (phase < half)
+            ? phase
+            : (BREATH_PERIOD_MS - phase);
 
     uint8_t val =
         BREATH_MIN_VAL +
@@ -406,10 +375,6 @@ void housekeeping_task_user(void) {
             ) * position / half
         );
 
-    /*
-     * Keep the layer indicator alive.
-     */
-
     rgblight_sethsv_noeeprom(
         current_hue,
         current_sat,
@@ -419,7 +384,7 @@ void housekeeping_task_user(void) {
 
 
 /* =========================================================
- * KEYBOARD INITIALIZATION
+ * Keyboard initialization
  * ========================================================= */
 
 void keyboard_post_init_user(void) {
@@ -438,7 +403,8 @@ void keyboard_post_init_user(void) {
 
     /*
      * Static mode.
-     * Brightness is controlled manually above.
+     *
+     * Our housekeeping_task_user() controls brightness.
      */
 
     rgblight_mode_noeeprom(
@@ -454,7 +420,7 @@ void keyboard_post_init_user(void) {
 
 
 /* =========================================================
- * LAYER RGB
+ * Layer RGB
  * ========================================================= */
 
 layer_state_t layer_state_set_user(
@@ -524,18 +490,14 @@ layer_state_t layer_state_set_user(
 
 
 /* =========================================================
- * KEYMAPS
+ * Keymaps
  * ========================================================= */
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
-    /*
-     * =====================================================
-     * LAYER 0
-     *
-     * F13 - F21
-     * =====================================================
-     */
+    /* =====================================================
+     * Layer 0
+     * ===================================================== */
 
     [0] = LAYOUT(
 
@@ -553,23 +515,24 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /*
-     * =====================================================
-     * LAYER 1
+    /* =====================================================
+     * Layer 1
      *
-     * Top:
+     * Tap volume keys:
      *
-     * VOL DOWN | MUTE | VOL UP
+     *   Left  = Volume Down
+     *   Center = Mute
+     *   Right = Volume Up
      *
-     * Middle:
+     * Hold:
      *
-     * BRIGHT DN | PLAY/PAUSE | BRIGHT UP
+     *   Left  = Previous Track
+     *   Right = Next Track
      *
-     * Bottom:
+     * Bottom middle/right:
      *
-     * PREV LAYER | unused | NEXT LAYER
-     * =====================================================
-     */
+     *   Brightness Down / Brightness Up
+     * ===================================================== */
 
     [1] = LAYOUT(
 
@@ -587,17 +550,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /*
-     * =====================================================
-     * LAYER 2
+    /* =====================================================
+     * Layer 2
      *
-     * Seven password slots.
-     *
-     * PASS1 | PASS2 | PASS3
-     * PASS4 | PASS5 | PASS6
-     * PREV  | PASS7 | NEXT
-     * =====================================================
-     */
+     * Passwords
+     * ===================================================== */
 
     [2] = LAYOUT(
 
@@ -615,21 +572,22 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     ),
 
 
-    /*
-     * =====================================================
-     * LAYER 3
+    /* =====================================================
+     * Layer 3
      *
-     * RGB controls.
+     * RGB controls
      *
-     * NOTE:
-     * UG_TOGG is intercepted below so that the layer
-     * indicator cannot be permanently disabled by it.
-     * =====================================================
-     */
+     * IMPORTANT:
+     *
+     * UG_TOGG is intentionally removed.
+     *
+     * The RGB LEDs are the layer indicators, so toggling
+     * RGB off would also remove the layer indication.
+     * ===================================================== */
 
     [3] = LAYOUT(
 
-        UG_TOGG,
+        KC_NO,
         UG_NEXT,
         UG_HUEU,
 
@@ -645,7 +603,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
 /* =========================================================
- * PROCESS KEYCODES
+ * Process keycodes
  * ========================================================= */
 
 bool process_record_user(
@@ -656,7 +614,7 @@ bool process_record_user(
     switch (keycode) {
 
         /* =================================================
-         * PASSWORD 1
+         * Password 1
          * ================================================= */
 
         case PASS1:
@@ -669,7 +627,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 2
+         * Password 2
          * ================================================= */
 
         case PASS2:
@@ -682,7 +640,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 3
+         * Password 3
          * ================================================= */
 
         case PASS3:
@@ -695,7 +653,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 4
+         * Password 4
          * ================================================= */
 
         case PASS4:
@@ -708,7 +666,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 5
+         * Password 5
          * ================================================= */
 
         case PASS5:
@@ -721,7 +679,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 6
+         * Password 6
          * ================================================= */
 
         case PASS6:
@@ -734,7 +692,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PASSWORD 7
+         * Password 7
          * ================================================= */
 
         case PASS7:
@@ -747,12 +705,8 @@ bool process_record_user(
 
 
         /* =================================================
-         * VOLUME DOWN / PREVIOUS TRACK
-         *
-         * Tap  = Volume Down
-         * Hold = Previous Track
-         * =================================================
-         */
+         * Volume Down / Previous Track
+         * ================================================= */
 
         case VOL_DOWN_TRACK:
 
@@ -770,7 +724,6 @@ bool process_record_user(
             if (volume_down_active) {
 
                 if (!volume_down_held) {
-
                     tap_code(KC_VOLD);
                 }
             }
@@ -782,12 +735,8 @@ bool process_record_user(
 
 
         /* =================================================
-         * VOLUME UP / NEXT TRACK
-         *
-         * Tap  = Volume Up
-         * Hold = Next Track
-         * =================================================
-         */
+         * Volume Up / Next Track
+         * ================================================= */
 
         case VOL_UP_TRACK:
 
@@ -805,7 +754,6 @@ bool process_record_user(
             if (volume_up_active) {
 
                 if (!volume_up_held) {
-
                     tap_code(KC_VOLU);
                 }
             }
@@ -817,7 +765,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * PREVIOUS LAYER
+         * Previous Layer
          * ================================================= */
 
         case LAYER_PREV:
@@ -843,7 +791,7 @@ bool process_record_user(
 
 
         /* =================================================
-         * NEXT LAYER
+         * Next Layer
          * ================================================= */
 
         case LAYER_NEXT:
@@ -866,35 +814,6 @@ bool process_record_user(
             }
 
             return false;
-
-
-        /* =================================================
-         * RGB TOGGLE
-         *
-         * We intentionally do not allow UG_TOGG to shut
-         * down the layer indicator because our layer color
-         * system continuously controls these same LEDs.
-         * =================================================
-         */
-
-        case UG_TOGG:
-
-            if (record->event.pressed) {
-
-                /*
-                 * Restore the current layer color.
-                 */
-
-                rgblight_enable_noeeprom();
-
-                rgblight_sethsv_noeeprom(
-                    current_hue,
-                    current_sat,
-                    current_max_val
-                );
-            }
-
-            return false;
     }
 
     return true;
@@ -902,24 +821,19 @@ bool process_record_user(
 
 
 /* =========================================================
- * MATRIX SCAN
+ * Matrix scan
  *
- * Volume keys:
+ * Volume:
  *
- * Tap:
- *   Volume Up / Down
- *
- * Hold >= 400 ms:
- *   Next / Previous Track
+ *   Tap  = Volume
+ *   Hold = Track
  * ========================================================= */
 
 void matrix_scan_user(void) {
 
-    /*
-     * =====================================================
+    /* =====================================================
      * Volume Down -> Previous Track
-     * =====================================================
-     */
+     * ===================================================== */
 
     if (
         volume_down_active &&
@@ -934,11 +848,9 @@ void matrix_scan_user(void) {
     }
 
 
-    /*
-     * =====================================================
+    /* =====================================================
      * Volume Up -> Next Track
-     * =====================================================
-     */
+     * ===================================================== */
 
     if (
         volume_up_active &&

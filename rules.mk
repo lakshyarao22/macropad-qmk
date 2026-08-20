@@ -1,14 +1,8 @@
-MCU = RP2040
+# =========================================================
+# Macropad rules.mk
+# =========================================================
+
+# RP2040 bootloader
 BOOTLOADER = rp2040
-
-WS2812_DRIVER = vendor
-
-RGBLIGHT_ENABLE = yes
-
-RAW_ENABLE = yes
-
-MOUSEKEY_ENABLE = yes
-EXTRAKEY_ENABLE = yes
-NKRO_ENABLE = yes
-BOOTMAGIC_ENABLE = yes
-SEND_STRING_ENABLE = yes
+EEPROM_DRIVER = wear_leveling
+WEAR_LEVELING_DRIVER = rp2040_flash
