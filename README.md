@@ -32,8 +32,8 @@ A versatile 3x3 macro keyboard powered by the RP2040 microcontroller, featuring 
 
 ### Layer 0 (Cyberpunk Cyan)
 ```
-Hyper+1   Hyper+2   Hyper+3
-Hyper+4   Hyper+5   Hyper+6
+Meh+1     Meh+2     Meh+3
+Meh+4     Meh+5     Meh+6
 Prev      Base      Next
 ```
 

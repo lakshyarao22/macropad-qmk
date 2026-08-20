@@ -674,20 +674,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     /* =====================================================
      * Layer 0
      *
-        * Hyper 1 - Hyper 6
+      * Meh 1 - Meh 6
      *
     * Color: Cyberpunk Cyan
      * ===================================================== */
 
     [0] = LAYOUT(
 
-        HYPR(KC_1),
-        HYPR(KC_2),
-        HYPR(KC_3),
+        MEH(KC_1),
+        MEH(KC_2),
+        MEH(KC_3),
 
-        HYPR(KC_4),
-        HYPR(KC_5),
-        HYPR(KC_6),
+        MEH(KC_4),
+        MEH(KC_5),
+        MEH(KC_6),
 
         LAYER_PREV,
         LAYER_BASE,
