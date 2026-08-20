@@ -74,29 +74,27 @@ static uint8_t pass_len = 0;
  * ========================================================= */
 
 static void pass_load_from_eeprom(uint8_t slot) {
+    uint8_t pass_len;
 
-    if (slot >= PASS_SLOT_COUNT) {
-        pass_len = 0;
-        pass_buf[0] = '\0';
-        return;
-    }
-
-    eeprom_address_t address =
-        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
+    uint8_t *address =
+        (uint8_t *)(PASS_EEPROM_BASE +
+                    (slot * PASS_EEPROM_SLOT_SIZE));
 
     pass_len = eeprom_read_byte(address);
 
-    if (pass_len > PASS_MAX_LEN) {
+    if (pass_len > PASS_MAX_LENGTH) {
         pass_len = 0;
     }
 
-    eeprom_read_block(
-        pass_buf,
-        address + 1,
-        pass_len
-    );
+    if (pass_len > 0) {
+        eeprom_read_block(
+            password_slots[slot],
+            address + 1,
+            pass_len
+        );
+    }
 
-    pass_buf[pass_len] = '\0';
+    password_slots[slot][pass_len] = '\0';
 }
 
 
@@ -104,32 +102,27 @@ static void pass_load_from_eeprom(uint8_t slot) {
  * Save password to EEPROM
  * ========================================================= */
 
-static void pass_save_to_eeprom(
-    uint8_t slot,
-    const char *new_pass,
-    uint8_t len
-) {
+static void pass_save_to_eeprom(uint8_t slot) {
+    uint8_t pass_len =
+        strlen(password_slots[slot]);
 
-    if (slot >= PASS_SLOT_COUNT) {
-        return;
+    if (pass_len > PASS_MAX_LENGTH) {
+        pass_len = PASS_MAX_LENGTH;
     }
 
-    if (len > PASS_MAX_LEN) {
-        len = PASS_MAX_LEN;
-    }
-
-    eeprom_address_t address =
-        PASS_EEPROM_BASE + (slot * PASS_SLOT_SIZE);
+    uint8_t *address =
+        (uint8_t *)(PASS_EEPROM_BASE +
+                    (slot * PASS_EEPROM_SLOT_SIZE));
 
     eeprom_update_byte(
         address,
-        len
+        pass_len
     );
 
     eeprom_update_block(
-        new_pass,
+        password_slots[slot],
         address + 1,
-        len
+        pass_len
     );
 }
 
