@@ -903,10 +903,10 @@ bool process_record_user(
 
             if (record->event.pressed) {
                 music_off();
-                setPinOutput(AUDIO_PIN);
-                writePinHigh(AUDIO_PIN);
+                gpio_set_pin_output(AUDIO_PIN);
+                gpio_write_pin_high(AUDIO_PIN);
             } else {
-                writePinLow(AUDIO_PIN);
+                gpio_write_pin_low(AUDIO_PIN);
             }
 
             return false;
