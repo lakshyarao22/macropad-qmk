@@ -26,21 +26,8 @@ enum custom_keycodes {
 
     LAYER_PREV,
     LAYER_NEXT,
-    LAYER_BASE,
-    BUZZER_TEST,
-
-#ifdef AUDIO_ENABLE
-    SONG_QWERTY,
-    SONG_DVORAK,
-    SONG_STARTUP
-#endif
+    LAYER_BASE
 };
-
-#ifdef AUDIO_ENABLE
-float sample_song_qwerty[][2] = SONG(QWERTY_SOUND);
-float sample_song_dvorak[][2] = SONG(DVORAK_SOUND);
-float sample_song_startup[][2] = SONG(STARTUP_SOUND);
-#endif
 
 
 /* =========================================================
@@ -573,14 +560,6 @@ layer_state_t layer_state_set_user(
     layer_state_t state
 ) {
 
-#ifdef MUSIC_ENABLE
-    if (get_highest_layer(state) == 7) {
-        music_on();
-    } else {
-        music_off();
-    }
-#endif
-
     switch (get_highest_layer(state)) {
 
         /* =================================================
@@ -866,20 +845,18 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-     * Layer 7 - Ice Blue / Piano
-     *
-    * Active buzzer test is on the top-left key.
+    * Layer 7 - Ice Blue
      * ===================================================== */
 
     [7] = LAYOUT(
 
-        BUZZER_TEST,
-        SONG_DVORAK,
-        SONG_STARTUP,
+        MEH(KC_G),
+        MEH(KC_H),
+        MEH(KC_I),
 
-        KC_C,
-        KC_D,
-        KC_E,
+        MEH(KC_J),
+        MEH(KC_K),
+        MEH(KC_L),
 
         LAYER_PREV,
         LAYER_BASE,
@@ -898,46 +875,6 @@ bool process_record_user(
 ) {
 
     switch (keycode) {
-
-        case BUZZER_TEST:
-
-            if (record->event.pressed) {
-                music_off();
-                gpio_set_pin_output(AUDIO_PIN);
-                gpio_write_pin_high(AUDIO_PIN);
-            } else {
-                gpio_write_pin_low(AUDIO_PIN);
-            }
-
-            return false;
-
-#ifdef AUDIO_ENABLE
-        case SONG_QWERTY:
-
-            if (record->event.pressed) {
-                PLAY_SONG(sample_song_qwerty);
-            }
-
-            return false;
-
-
-        case SONG_DVORAK:
-
-            if (record->event.pressed) {
-                PLAY_SONG(sample_song_dvorak);
-            }
-
-            return false;
-
-
-        case SONG_STARTUP:
-
-            if (record->event.pressed) {
-                PLAY_SONG(sample_song_startup);
-            }
-
-            return false;
-#endif
 
         /* =================================================
          * Password 1

@@ -1,8 +1,3 @@
 #pragma once
 
 #define TAPPING_TERM 200
-
-#define AUDIO_PIN GP28
-#define AUDIO_PWM_DRIVER PWMD6
-#define AUDIO_PWM_CHANNEL RP2040_PWM_CHANNEL_B
-#define AUDIO_CLICKY
