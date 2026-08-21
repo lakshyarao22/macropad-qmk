@@ -365,37 +365,45 @@ void raw_hid_receive(
  * Breathing minimum = 40%.
  */
 
-#define LAYER0_R       0
-#define LAYER0_G       255
-#define LAYER0_B       200
+// Layer 0: Cobalt Blue (Deep blue, easily distinguished from Teal)
+#define LAYER0_R       30
+#define LAYER0_G       50
+#define LAYER0_B       255
 
+// Layer 1: Sunset Amber (Distinct, warm orange)
 #define LAYER1_R       255
-#define LAYER1_G       0
-#define LAYER1_B       150
+#define LAYER1_G       100
+#define LAYER1_B       0
 
+// Layer 2: Golden Yellow (Filament bulb glow)
 #define LAYER2_R       255
-#define LAYER2_G       110
-#define LAYER2_B       0
+#define LAYER2_G       180
+#define LAYER2_B       20
 
-#define LAYER3_R       255
-#define LAYER3_G       0
-#define LAYER3_B       20
+// Layer 3: Crimson Rose (Softened, rich red)
+#define LAYER3_R       230
+#define LAYER3_G       20
+#define LAYER3_B       50
 
-#define LAYER4_R       50
-#define LAYER4_G       255
-#define LAYER4_B       20
+// Layer 4: Electric Teal (Sci-fi cyan)
+#define LAYER4_R       0
+#define LAYER4_G       220
+#define LAYER4_B       180
 
-#define LAYER5_R       120
-#define LAYER5_G       0
-#define LAYER5_B       255
+// Layer 5: Emerald (Smooth, gem-like green)
+#define LAYER5_R       20
+#define LAYER5_G       220
+#define LAYER5_B       40
 
-#define LAYER6_R       255
-#define LAYER6_G       180
-#define LAYER6_B       100
+// Layer 6: Neon Violet (Dark purple)
+#define LAYER6_R       140
+#define LAYER6_G       20
+#define LAYER6_B       240
 
-#define LAYER7_R       40
-#define LAYER7_G       180
-#define LAYER7_B       255
+// Layer 7: Vaporwave Pink (Bright, distinct magenta/pink)
+#define LAYER7_R       240
+#define LAYER7_G       50
+#define LAYER7_B       140
 
 
 /* =========================================================
@@ -552,6 +560,14 @@ layer_state_t layer_state_set_user(
     layer_state_t state
 ) {
 
+#ifdef MUSIC_ENABLE
+    if (get_highest_layer(state) == 7) {
+        music_on();
+    } else {
+        music_off();
+    }
+#endif
+
     switch (get_highest_layer(state)) {
 
         /* =================================================
@@ -681,13 +697,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [0] = LAYOUT(
 
-        MEH(KC_1),
-        MEH(KC_2),
-        MEH(KC_3),
+        MEH(KC_P1),
+        MEH(KC_P2),
+        MEH(KC_P3),
 
-        MEH(KC_4),
-        MEH(KC_5),
-        MEH(KC_6),
+        MEH(KC_P4),
+        MEH(KC_P5),
+        MEH(KC_P6),
 
         LAYER_PREV,
         LAYER_BASE,
@@ -781,13 +797,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [4] = LAYOUT(
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_F13),
+        MEH(KC_F14),
+        MEH(KC_F15),
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_F16),
+        MEH(KC_F17),
+        MEH(KC_F18),
 
         LAYER_PREV,
         LAYER_BASE,
@@ -801,13 +817,14 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [5] = LAYOUT(
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_P7),
+        MEH(KC_P8),
+        MEH(KC_P9),
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_P0),
+        MEH(KC_PSLS),
+        MEH(KC_PAST),
+
 
         LAYER_PREV,
         LAYER_BASE,
@@ -821,13 +838,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [6] = LAYOUT(
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_A),
+        MEH(KC_B),
+        MEH(KC_C),
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        MEH(KC_D),
+        MEH(KC_E),
+        MEH(KC_F),
 
         LAYER_PREV,
         LAYER_BASE,
@@ -836,18 +853,20 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-    * Layer 7 - Ice Blue
+     * Layer 7 - Ice Blue / Piano
+     *
+    * Music Mode is enabled automatically on this layer.
      * ===================================================== */
 
     [7] = LAYOUT(
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        KC_C,
+        KC_D,
+        KC_E,
 
-        KC_NO,
-        KC_NO,
-        KC_NO,
+        KC_F,
+        KC_G,
+        KC_A,
 
         LAYER_PREV,
         LAYER_BASE,

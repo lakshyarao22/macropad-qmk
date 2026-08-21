@@ -11,6 +11,7 @@ A versatile 3x3 macro keyboard powered by the RP2040 microcontroller, featuring 
 - **9-Key Layout**: 3x3 grid of mechanical switches
 - **Multiple Layers**: Access different functions through layer switching
 - **RGB Lighting** (v2): 3 addressable WS2812 RGB LEDs with multiple animation modes
+- **Audio Feedback**: PWM-driven piezo audio on GPIO 28
 - **Full QMK Support**: Comprehensive customization via QMK firmware
 - **Bootmagic**: Hold the top-left key while plugging in to enter bootloader mode
 
@@ -76,7 +77,7 @@ Layers 4 through 7 are currently unassigned and all keys are `KC_NO`.
 | 4 | Acid Green `(50, 255, 20)` |
 | 5 | Deep Violet `(120, 0, 255)` |
 | 6 | Warm White `(255, 180, 100)` |
-| 7 | Ice Blue `(40, 180, 255)` |
+| 7 | Ice Blue `(40, 180, 255)` with piano mode |
 
 ## Building & Flashing
 
@@ -144,7 +145,21 @@ Row 0: GPIO 27, 14, 6
 Row 1: GPIO 15, 9, 5
 Row 2: GPIO 26, 8, 4
 RGB LED: GPIO 13
+Audio: GPIO 28
 ```
+
+### Audio
+
+QMK audio is enabled with software PWM on `GP28`. Connect a small passive
+piezo buzzer between `GP28` and `GND`. Audio clicky feedback is enabled, and
+the default startup song provides a test tone when the keyboard boots.
+
+Layer 7 is a basic piano layer. Music Mode is enabled automatically when this
+layer is selected and disabled when leaving it. The six upper keys play notes;
+the bottom row continues to provide previous, base, and next layer controls.
+
+Do not connect a high-current buzzer directly to the RP2040 GPIO. Use a
+transistor driver for larger buzzers or speakers.
 
 ## Customization
 
