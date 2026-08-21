@@ -26,8 +26,20 @@ enum custom_keycodes {
 
     LAYER_PREV,
     LAYER_NEXT,
-    LAYER_BASE
+    LAYER_BASE,
+
+#ifdef AUDIO_ENABLE
+    SONG_QWERTY,
+    SONG_DVORAK,
+    SONG_STARTUP
+#endif
 };
+
+#ifdef AUDIO_ENABLE
+float sample_song_qwerty[][2] = SONG(QWERTY_SOUND);
+float sample_song_dvorak[][2] = SONG(DVORAK_SOUND);
+float sample_song_startup[][2] = SONG(STARTUP_SOUND);
+#endif
 
 
 /* =========================================================
@@ -860,13 +872,13 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
     [7] = LAYOUT(
 
+        SONG_QWERTY,
+        SONG_DVORAK,
+        SONG_STARTUP,
+
         KC_C,
         KC_D,
         KC_E,
-
-        KC_F,
-        KC_G,
-        KC_A,
 
         LAYER_PREV,
         LAYER_BASE,
@@ -885,6 +897,34 @@ bool process_record_user(
 ) {
 
     switch (keycode) {
+
+#ifdef AUDIO_ENABLE
+        case SONG_QWERTY:
+
+            if (record->event.pressed) {
+                PLAY_SONG(sample_song_qwerty);
+            }
+
+            return false;
+
+
+        case SONG_DVORAK:
+
+            if (record->event.pressed) {
+                PLAY_SONG(sample_song_dvorak);
+            }
+
+            return false;
+
+
+        case SONG_STARTUP:
+
+            if (record->event.pressed) {
+                PLAY_SONG(sample_song_startup);
+            }
+
+            return false;
+#endif
 
         /* =================================================
          * Password 1
