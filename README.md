@@ -154,12 +154,13 @@ QMK audio is enabled with software PWM on `GP28`. Connect a small passive
 piezo buzzer between `GP28` and `GND`. Audio clicky feedback is enabled, and
 the default startup song provides a test tone when the keyboard boots.
 
-Layer 7 is a basic piano layer. Music Mode is enabled automatically when this
-layer is selected and disabled when leaving it. The top row plays sample songs;
-the middle row provides three piano notes. The bottom row continues to provide
-previous, base, and next layer controls.
+Layer 7 is an active buzzer test layer. Hold the top-left key (`BUZZER_TEST`)
+to drive `GP28` HIGH; release it to turn the buzzer off. The middle row remains
+available for piano notes, and the bottom row continues to provide previous,
+base, and next layer controls.
 
-The layer 7 song keys play QWERTY, DVORAK, and startup sample songs from QMK.
+The TMB12A03 is an active buzzer, so this direct HIGH/LOW test is more suitable
+than QMK sample songs. A passive piezo is required for piano songs.
 
 Do not connect a high-current buzzer directly to the RP2040 GPIO. Use a
 transistor driver for larger buzzers or speakers.

@@ -27,6 +27,7 @@ enum custom_keycodes {
     LAYER_PREV,
     LAYER_NEXT,
     LAYER_BASE,
+    BUZZER_TEST,
 
 #ifdef AUDIO_ENABLE
     SONG_QWERTY,
@@ -867,12 +868,12 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     /* =====================================================
      * Layer 7 - Ice Blue / Piano
      *
-    * Music Mode is enabled automatically on this layer.
+    * Active buzzer test is on the top-left key.
      * ===================================================== */
 
     [7] = LAYOUT(
 
-        SONG_QWERTY,
+        BUZZER_TEST,
         SONG_DVORAK,
         SONG_STARTUP,
 
@@ -897,6 +898,18 @@ bool process_record_user(
 ) {
 
     switch (keycode) {
+
+        case BUZZER_TEST:
+
+            if (record->event.pressed) {
+                music_off();
+                setPinOutput(AUDIO_PIN);
+                writePinHigh(AUDIO_PIN);
+            } else {
+                writePinLow(AUDIO_PIN);
+            }
+
+            return false;
 
 #ifdef AUDIO_ENABLE
         case SONG_QWERTY:
