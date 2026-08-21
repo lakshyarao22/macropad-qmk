@@ -18,17 +18,18 @@ Passwords are entered interactively and are NOT written to disk.
 
 Usage:
 
-    python3 set_password.py
+    python3 Set_pass.py
 
 List HID devices:
 
-    python3 set_password.py --list
+    python3 Set_pass.py --list
 
 Requires:
 
     pip install hidapi
 """
 
+import getpass
 import sys
 
 try:
@@ -123,7 +124,6 @@ def find_raw_hid_path():
         ):
 
             return d["path"]
-
     raise RuntimeError(
         "\nRaw HID interface not found.\n\n"
         "Expected:\n"
@@ -132,7 +132,7 @@ def find_raw_hid_path():
         f"  usage_page = {RAW_USAGE_PAGE:#06x}\n"
         f"  usage      = {RAW_USAGE:#04x}\n\n"
         "Run:\n"
-        "    python3 set_password.py --list\n\n"
+        "    python3 Set_pass.py --list\n\n"
         "and check that the macropad Raw HID interface "
         "appears."
     )
@@ -149,13 +149,13 @@ def get_slot():
         try:
 
             slot = int(
-                input("Password slot (1-7): ")
+                input(f"Password slot (1-{PASS_SLOT_COUNT}): ")
             )
 
         except ValueError:
 
             print(
-                "Please enter a number from 1 to 7."
+                f"Please enter a number from 1 to {PASS_SLOT_COUNT}."
             )
 
             continue
@@ -165,7 +165,7 @@ def get_slot():
             return slot - 1
 
         print(
-            "Please enter a number from 1 to 7."
+            f"Please enter a number from 1 to {PASS_SLOT_COUNT}."
         )
 
 
@@ -175,7 +175,7 @@ def get_slot():
 
 def get_password():
 
-    password = input(
+    password = getpass.getpass(
         "Enter password: "
     )
 
@@ -241,7 +241,7 @@ def build_packet(slot, password_bytes):
     #
     # QMK receives the remaining 32-byte Raw HID
     # payload as data[].
-
+        password_bytes = get_password()
     report = (
         bytes([0])
         +

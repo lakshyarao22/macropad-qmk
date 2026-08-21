@@ -3,6 +3,7 @@ name: Build QMK Macropad
 on:
   push:
     branches: [main, master, develop]
+    tags: ['v*']
   pull_request:
     branches: [main, master, develop]
   workflow_dispatch:
@@ -55,16 +56,13 @@ jobs:
           echo "===== MACROPAD FILES ====="
           find keyboards/macropad -type f -print
 
-      # --------------------------------------------------
-      # Show source being built
-      # --------------------------------------------------
-      - name: Show Macropad Configuration
-        run: |
-          echo "===== keyboard.json ====="
-          cat keyboards/macropad/keyboard.json
-
-          echo "===== keymap.c ====="
-          cat keyboards/macropad/keymaps/default/keymap.c
+      - name: Cache QMK build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: qmk-build-${{ runner.os }}-${{ hashFiles('macropad/**') }}
+          restore-keys: |
+            qmk-build-${{ runner.os }}-
 
       # --------------------------------------------------
       # Build
@@ -142,4 +140,4 @@ jobs:
 
             Download the UF2 below and flash it to the RP2040.
           draft: false
-          prerelease: false
+          prerelease: true

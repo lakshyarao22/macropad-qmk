@@ -17,6 +17,7 @@ enum custom_keycodes {
     PASS1 = SAFE_RANGE,
     PASS2,
     PASS3,
+
     PASS4,
     PASS5,
     PASS6,
@@ -424,10 +425,6 @@ void raw_hid_receive(
 #define BREATH_MIN_VAL \
     ((BREATH_MIN_PERCENT * 255) / 100)
 
-#define PCT_TO_VAL(pct) \
-    ((pct) * 255 / 100)
-
-
 static uint8_t current_red =
     LAYER0_R;
 
@@ -436,10 +433,6 @@ static uint8_t current_green =
 
 static uint8_t current_blue =
     LAYER0_B;
-
-static uint8_t current_max_val =
-    255;
-
 
 /* =========================================================
  * Volume / track hold handling
@@ -503,7 +496,7 @@ void housekeeping_task_user(void) {
         BREATH_MIN_VAL +
         (uint8_t)(
             (uint32_t)(
-                current_max_val -
+                255 -
                 BREATH_MIN_VAL
             ) * position / half
         );
@@ -563,7 +556,7 @@ layer_state_t layer_state_set_user(
     switch (get_highest_layer(state)) {
 
         /* =================================================
-         * Layer 0 - Cyan
+         * Layer 0 - Cobalt Blue
          * ================================================= */
 
         case 0:
@@ -577,13 +570,11 @@ layer_state_t layer_state_set_user(
             current_blue =
                 LAYER0_B;
 
-            current_max_val = 255;
-
             break;
 
 
         /* =================================================
-         * Layer 1 - Blue
+         * Layer 1 - Sunset Amber
          * ================================================= */
 
         case 1:
@@ -597,13 +588,11 @@ layer_state_t layer_state_set_user(
             current_blue =
                 LAYER1_B;
 
-            current_max_val = 255;
-
             break;
 
 
         /* =================================================
-         * Layer 2 - Green
+         * Layer 2 - Golden Yellow
          * ================================================= */
 
         case 2:
@@ -617,8 +606,6 @@ layer_state_t layer_state_set_user(
             current_blue =
                 LAYER2_B;
 
-            current_max_val = 255;
-
             break;
 
 
@@ -627,7 +614,6 @@ layer_state_t layer_state_set_user(
             current_red = LAYER3_R;
             current_green = LAYER3_G;
             current_blue = LAYER3_B;
-            current_max_val = 255;
             break;
 
 
@@ -636,7 +622,6 @@ layer_state_t layer_state_set_user(
             current_red = LAYER4_R;
             current_green = LAYER4_G;
             current_blue = LAYER4_B;
-            current_max_val = 255;
             break;
 
 
@@ -645,7 +630,6 @@ layer_state_t layer_state_set_user(
             current_red = LAYER5_R;
             current_green = LAYER5_G;
             current_blue = LAYER5_B;
-            current_max_val = 255;
             break;
 
 
@@ -654,7 +638,6 @@ layer_state_t layer_state_set_user(
             current_red = LAYER6_R;
             current_green = LAYER6_G;
             current_blue = LAYER6_B;
-            current_max_val = 255;
             break;
 
 
@@ -663,7 +646,6 @@ layer_state_t layer_state_set_user(
             current_red = LAYER7_R;
             current_green = LAYER7_G;
             current_blue = LAYER7_B;
-            current_max_val = 255;
             break;
     }
 
@@ -684,7 +666,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *
       * Meh 1 - Meh 6
      *
-    * Color: Cyberpunk Cyan
+        * Color: Cobalt Blue
      * ===================================================== */
 
     [0] = LAYOUT(
@@ -716,7 +698,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *   tap  = Volume Up
      *   hold = Next Track
      *
-        * Color: Vaporwave Magenta
+      * Color: Sunset Amber
      * ===================================================== */
 
     [1] = LAYOUT(
@@ -740,7 +722,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *
      * F13 - F18
      *
-     * Color: Amber Gold
+    * Color: Golden Yellow
      * ===================================================== */
 
     [2] = LAYOUT(
@@ -764,7 +746,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
      *
      * Six password slots
      *
-    * Color: Crimson Red
+        * Color: Crimson Rose
      * ===================================================== */
 
     [3] = LAYOUT(
@@ -784,7 +766,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-     * Layer 4 - Acid Green
+    * Layer 4 - Electric Teal
      * ===================================================== */
 
     [4] = LAYOUT(
@@ -804,7 +786,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-     * Layer 5 - Deep Violet
+    * Layer 5 - Emerald
      * ===================================================== */
 
     [5] = LAYOUT(
@@ -825,7 +807,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-     * Layer 6 - Warm White
+    * Layer 6 - Neon Violet
      * ===================================================== */
 
     [6] = LAYOUT(
@@ -845,7 +827,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 
     /* =====================================================
-    * Layer 7 - Ice Blue
+        * Layer 7 - Vaporwave Pink
      * ===================================================== */
 
     [7] = LAYOUT(

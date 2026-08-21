@@ -30,14 +30,14 @@ A versatile 3x3 macro keyboard powered by the RP2040 microcontroller, featuring 
 
 ## Default Keymap
 
-### Layer 0 (Cyberpunk Cyan)
+### Layer 0 (Cobalt Blue)
 ```
 Meh+1     Meh+2     Meh+3
 Meh+4     Meh+5     Meh+6
 Prev      Base      Next
 ```
 
-### Layer 1 (Vaporwave Magenta)
+### Layer 1 (Sunset Amber)
 ```
 Vol-      Mute      Vol+
 Prev      Play      Next
@@ -48,7 +48,7 @@ The volume keys send volume down/up when tapped and previous/next track
 when held for 400 ms. The bottom-center key always returns to layer 0;
 the bottom-right key advances to the next layer.
 
-### Layer 2 (Amber Gold)
+### Layer 2 (Golden Yellow)
 ```
 F13       F14       F15
 F16       F17       F18
@@ -59,7 +59,7 @@ Each password key types the password stored in one of six EEPROM slots and then
 presses Enter. Passwords are limited to 31 ASCII characters and are stored
 unencrypted in the keyboard's EEPROM.
 
-### Layer 3 (Crimson Red)
+### Layer 3 (Crimson Rose)
 
 ```
 Pass1     Pass2     Pass3
@@ -67,18 +67,22 @@ Pass4     Pass5     Pass6
 Prev      Base      Next
 ```
 
-### Layers 4-7
+### Layers 4-6
 
 Layers 4 through 6 are currently unassigned and all keys are `KC_NO`.
 
-Layer 7 provides `Meh+G` through `Meh+L` on its upper six keys.
+Layer 7 (Vaporwave Pink) provides `Meh+G` through `Meh+L` on its upper six keys.
 
 | Layer | Color |
 |-------|-------|
-| 4 | Acid Green `(50, 255, 20)` |
-| 5 | Deep Violet `(120, 0, 255)` |
-| 6 | Warm White `(255, 180, 100)` |
-| 7 | Ice Blue `(40, 180, 255)` |
+| 0 | Cobalt Blue `(30, 50, 255)` |
+| 1 | Sunset Amber `(255, 100, 0)` |
+| 2 | Golden Yellow `(255, 180, 20)` |
+| 3 | Crimson Rose `(230, 20, 50)` |
+| 4 | Electric Teal `(0, 220, 180)` |
+| 5 | Emerald `(20, 220, 40)` |
+| 6 | Neon Violet `(140, 20, 240)` |
+| 7 | Vaporwave Pink `(240, 50, 140)` |
 
 ## Building & Flashing
 
@@ -98,7 +102,6 @@ make macropad:default:flash
 When prompted, enter bootloader mode by:
 - **Bootmagic reset**: Hold the top-left key (matrix position 0,0) and plug in the keyboard
 - **Physical reset**: Press the reset button on the PCB
-- **Keycode**: Press the key mapped to `QK_BOOT`
 
 ## Automated Builds & Releases
 
@@ -182,7 +185,6 @@ The macropad uses the RP2040 bootloader. Enter bootloader mode in 3 ways:
 
 1. **Bootmagic reset**: Hold down the key at matrix position (0,0) and plug in the keyboard
 2. **Physical reset button**: Press the reset button on the PCB
-3. **Keycode in layout**: Press `QK_BOOT` if mapped in your keymap
 
 ## Documentation
 

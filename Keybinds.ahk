@@ -31,11 +31,11 @@ PgDn::Send "{Media_Play_Pause}"
 }
 
 ~MButton & WheelUp:: {
-    SoundSetVolume "+5"   ; increase by 2%
+    SoundSetVolume "+5" ; increase by 5 percentage points
 }
 
 ~MButton & WheelDown:: {
-    SoundSetVolume "-5"   ; decrease by 2%
+    SoundSetVolume "-5" ; decrease by 5 percentage points
 }
 
 #q:: Send "!{F4}"
@@ -97,7 +97,7 @@ F13::
 	{
 		Run("https://es-watchguard.splunkcloud.com/en-GB/app/SplunkEnterpriseSecuritySuite/incident_review?earliest=-24h%40h&latest=now#/")
 	}
-	if WinActive("ahkautoa_exe explorer.exe")
+    if WinActive("ahk_exe explorer.exe")
     {
         Run("https://es-watchguard.splunkcloud.com/en-GB/app/SplunkEnterpriseSecuritySuite/incident_review?earliest=-24h%40h&latest=now#/")
     }
